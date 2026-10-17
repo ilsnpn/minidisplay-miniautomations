@@ -1,0 +1,22 @@
+{
+  "name": "mdma-video",
+  "private": true,
+  "description": "Vidéo de présentation MDMA (Remotion)",
+  "scripts": {
+    "prepare-assets": "node prepare.mjs",
+    "studio": "node prepare.mjs && remotion studio src/index.js",
+    "render": "node prepare.mjs && remotion render src/index.js MDMA out/mdma.mp4 --gl=angle --crf=24",
+    "sfx": "python make_sfx.py"
+  },
+  "dependencies": {
+    "@react-three/fiber": "^8.17.10",
+    "@remotion/cli": "^4.0.220",
+    "@remotion/google-fonts": "^4.0.220",
+    "@remotion/media-utils": "^4.0.220",
+    "@remotion/three": "^4.0.220",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "^4.0.220",
+    "three": "^0.160.0"
+  }
+}

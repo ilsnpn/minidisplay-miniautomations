@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="color-scheme" content="dark light">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MDMA - MiniDisplay MiniAutomations</title>
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <meta name="description" content="Où acheter la carte ESP32-C6-LCD-1.47 utilisée par MDMA, et quels boîtiers imprimés en 3D lui donner.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="docs.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap">
+    <a class="brand" href="index.html" title="MDMA : MiniDisplay MiniAutomations"><span class="brand-mark" aria-hidden="true"></span>MDMA</a>
+    <div class="nav-links">
+      <div class="nav-drop">
+        <button type="button" aria-haspopup="true">Documentation</button>
+        <div class="nav-menu">
+          <a href="architecture.html"><span>1</span>Architecture</a>
+          <a href="pont.html"><span>2</span>Le pont PC</a>
+          <a href="firmware.html"><span>3</span>Le firmware</a>
+          <a href="materiel.html"><span>4</span>La carte</a>
+          <a href="guide.html"><span>5</span>Guide pas à pas</a>
+        </div>
+      </div>
+      <a href="boitiers.html" aria-current="page">Boîtiers</a>
+      <a href="https://github.com/ilsnpn/minidisplay-miniautomations" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="doc-hero">
+  <div class="wrap">
+    <span class="kicker">Fabriquer</span>
+    <h1>Acheter la carte et l'habiller</h1>
+    <p class="lead">La carte du projet, et des boîtiers à imprimer en 3D.</p>
+    <div class="doc-meta"><span>Lecture : 4 min</span></div>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="toc">
+    <div class="cap">Sur cette page</div>
+    <a href="#acheter">Acheter la carte</a>
+    <a href="#boitiers">Boîtiers imprimés en 3D</a>
+    <a href="#concevoir">Concevoir le sien</a>
+  </aside>
+
+  <article class="prose">
+
+    <section id="acheter">
+      <h2><span class="n">01</span>Acheter la carte</h2>
+      <div class="buy-card">
+        <img src="assets/01-presentation-produit.png" alt="La carte Waveshare ESP32-C6-LCD-1.47" loading="lazy">
+        <div>
+          <span class="badge-mini">Celle du projet</span>
+          <h3>Waveshare ESP32-C6-LCD-1.47</h3>
+          <p>ESP32-C6, écran IPS 1,47″ 172 × 320, LED RGB, lecteur microSD, USB-C. C'est l'offre AliExpress d'où vient la carte utilisée pour MDMA.</p>
+          <a class="btn primary" href="https://www.aliexpress.com/item/1005008971249661.html" target="_blank" rel="noopener">Voir sur AliExpress ↗</a>
+        </div>
+      </div>
+      <div class="callout warn">
+        <b>Bien choisir la variante</b>
+        <p>Une même annonce propose souvent plusieurs versions. MDMA utilise la version <strong>avec écran</strong> (1,47″) et ne nécessite <strong>aucune broche soudée</strong> : un câble USB-C de données suffit.</p>
+      </div>
+      <p>La carte est aussi vendue par Waveshare et par les revendeurs habituels (Amazon, distributeurs d'électronique). Le nom exact à chercher est <code>ESP32-C6-LCD-1.47</code>. Attention à ne pas la confondre avec la <code>ESP32-S3-LCD-1.47</code>, une carte voisine dont le brochage diffère.</p>
+    </section>
+
+    <section id="boitiers">
+      <h2><span class="n">02</span>Boîtiers imprimés en 3D</h2>
+      <div class="case-list" id="case-list">
+        <div class="case-card">
+          <div class="case-head">
+            <div>
+              <h3>ESP32-C6 1.47″ Waveshare LCD Case</h3>
+              <p class="case-by">par MakerMind3D</p>
+            </div>
+            <a class="btn" href="https://makerworld.com/fr/models/2640318-esp32-c6-1-47-waveshare-lcd-case#profileId-2917148" target="_blank" rel="noopener">Voir sur MakerWorld ↗</a>
+          </div>
+          <div class="case-photos">
+            <img src="assets/boitiers/makermind-1.jpg" alt="Boîtier MakerMind3D, face écran" loading="lazy">
+            <img src="assets/boitiers/makermind-2.jpg" alt="Version fenêtres RGB, LED allumée" loading="lazy">
+            <img src="assets/boitiers/makermind-3.jpg" alt="Dos du boîtier, carte clipsée" loading="lazy">
+          </div>
+          <p class="case-note">Une pièce qui se clipse. Version « fenêtres RGB » à imprimer en PLA transparent.</p>
+        </div>
+
+        <div class="case-card">
+          <div class="case-head">
+            <div>
+              <h3>ESP32-C6 with LCD Screen Enclosure Case</h3>
+              <p class="case-by">par Adrian</p>
+            </div>
+            <a class="btn" href="https://makerworld.com/fr/models/2121443-esp32-c6-with-lcd-screen-enclosure-case#profileId-2296385" target="_blank" rel="noopener">Voir sur MakerWorld ↗</a>
+          </div>
+          <div class="case-photos">
+            <img src="assets/boitiers/adrian-1.jpg" alt="Boîtier d'Adrian, deux coloris" loading="lazy">
+            <img src="assets/boitiers/adrian-2.jpg" alt="Les pièces du boîtier d'Adrian" loading="lazy">
+          </div>
+        </div>
+
+        <div class="case-card">
+          <div class="case-head">
+            <div>
+              <h3>ESP32-C6 Micro Desktop Companion</h3>
+              <p class="case-by">par 嵌入式老登</p>
+            </div>
+            <a class="btn" href="https://makerworld.com/fr/models/3162935-esp32-c6-micro-desktop-companion#profileId-3574793" target="_blank" rel="noopener">Voir sur MakerWorld ↗</a>
+          </div>
+          <div class="case-photos">
+            <img src="assets/boitiers/companion-1.jpg" alt="Micro Desktop Companion posé sur un bureau" loading="lazy">
+          </div>
+        </div>
+      </div>
+      <p class="case-note">Photos : leurs auteurs, sur MakerWorld.</p>
+
+    </section>
+
+    <section id="concevoir">
+      <h2><span class="n">03</span>Concevoir le sien</h2>
+      <p>Waveshare publie le modèle CAO complet de la carte. C'est la base idéale pour dessiner un boîtier ajusté au dixième de millimètre.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Fichier</th><th>Format</th><th>Usage</th></tr></thead>
+          <tbody>
+            <tr><td><a href="https://files.waveshare.com/wiki/ESP32-C6-LCD-1.47/ESP32-C6-LCD-1.47-3D_Drawing.rar">Modèle 3D officiel</a></td><td>STEP (archive RAR)</td><td>Logiciels de CAO : Fusion, FreeCAD, Onshape, SolidWorks</td></tr>
+            <tr><td><a href="assets/models/esp32-c6-lcd-1.47.glb" download>Version web de ce site</a></td><td>GLB</td><td>Blender, visionneuses 3D, three.js</td></tr>
+            <tr><td><a href="https://files.waveshare.com/wiki/ESP32-C6-LCD-1.47/ESP32-C6-LCD-1.47_schemetics.pdf">Schéma électrique</a></td><td>PDF</td><td>Comprendre le câblage</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Cote utile</th><th>Valeur</th></tr></thead>
+          <tbody>
+            <tr><td>Circuit imprimé</td><td>36,37 × 20,32 × 0,8 mm</td></tr>
+            <tr><td>Épaisseur totale, écran compris</td><td>≈ 8,4 mm, USB-C et entretoises compris</td></tr>
+            <tr><td>Fixation</td><td>4 entretoises M2, déjà soudées sous la carte</td></tr>
+            <tr><td>Débord des boutons</td><td>≈ 1,2 mm de chaque côté (largeur totale 22,7 mm)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Les cotes ci-dessus sont mesurées sur le modèle CAO. Le modèle se manipule aussi dans l'<a href="index.html#explorer">explorateur 3D</a> de l'accueil.</p>
+    </section>
+
+    <div class="pager">
+      <a href="guide.html"><small>← Précédent</small><b>Guide pas à pas</b></a>
+      <a class="next" href="index.html"><small>Retour →</small><b>Accueil</b></a>
+    </div>
+  </article>
+</div>
+
+<footer>
+  <div class="wrap">
+    <span>MDMA - MiniDisplay MiniAutomations · 2026 Q4 · Projet perso</span>
+    <span><a href="guide.html">Refaire le projet pas à pas</a></span>
+  </div>
+</footer>
+
+<script src="js/docs.js"></script>
+</body>
+</html>

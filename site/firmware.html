@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="color-scheme" content="dark light">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MDMA - MiniDisplay MiniAutomations</title>
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <meta name="description" content="Le firmware ESP32-C6 de MDMA expliqué : écran ST7789, rendu hors écran, réception série, horloge, calcul des jauges.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+  <link rel="stylesheet" href="style.css">
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="docs.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap">
+    <a class="brand" href="index.html" title="MDMA : MiniDisplay MiniAutomations"><span class="brand-mark" aria-hidden="true"></span>MDMA</a>
+    <div class="nav-links">
+      <div class="nav-drop">
+        <button type="button" class="on" aria-haspopup="true">Documentation</button>
+        <div class="nav-menu">
+          <a href="architecture.html"><span>1</span>Architecture</a>
+          <a href="pont.html"><span>2</span>Le pont PC</a>
+          <a href="firmware.html" aria-current="page"><span>3</span>Le firmware</a>
+          <a href="materiel.html"><span>4</span>La carte</a>
+          <a href="guide.html"><span>5</span>Guide pas à pas</a>
+        </div>
+      </div>
+      <a href="boitiers.html">Boîtiers</a>
+      <a href="https://github.com/ilsnpn/minidisplay-miniautomations" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="doc-hero">
+  <div class="wrap">
+    <span class="kicker">Comprendre · 3 / 5</span>
+    <h1>Le firmware : ce qui tourne dans la carte</h1>
+    <p class="lead">Un programme Arduino d'environ 470 lignes. Il initialise l'écran, écoute l'USB et le bouton BOOT, garde l'heure entre deux messages et redessine tout l'écran d'un bloc, sans scintillement.</p>
+    <div class="doc-meta"><span>Lecture : 15 min</span><span>Fichier : firmware/claude_usage/claude_usage.ino</span><span>C++ · Arduino ESP32 3.3</span></div>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="toc">
+    <div class="cap">Sur cette page</div>
+    <a href="#vue">Vue d'ensemble</a>
+    <a href="#outils">Outils et bibliothèques</a>
+    <a href="#ecran">Allumer l'écran</a>
+    <a href="#rendu">Dessiner sans scintiller</a>
+    <a href="#layout">La mise en page</a>
+    <a href="#reception">Recevoir une trame</a>
+    <a href="#horloge">Une horloge sans horloge</a>
+    <a href="#jauges">Le calcul des jauges</a>
+    <a href="#etats">Les états dégradés</a>
+    <a href="#led">La LED</a>
+    <a href="#bouton">Le bouton BOOT</a>
+    <a href="#pieges">Pièges rencontrés</a>
+    <a href="#compiler">Compiler et téléverser</a>
+  </aside>
+
+  <article class="prose">
+
+    <section id="vue">
+      <h2><span class="n">00</span>Vue d'ensemble</h2>
+      <p>Tout programme Arduino a deux fonctions : <code>setup()</code>, exécutée une fois au démarrage, et <code>loop()</code>, rappelée en boucle ensuite. Ici, la boucle tourne environ 100 fois par seconde et fait deux choses : lire ce qui arrive sur l'USB, et redessiner l'écran toutes les 5 secondes.</p>
+      <figure class="diagram">
+<pre class="mermaid">
+flowchart LR
+    subgraph setup["setup() · une fois"]
+        direction TB
+        S1[Port série USB] --> S2[Rétroéclairage]
+        S2 --> S3["Bus SPI + écran<br/>ST7789"]
+        S3 --> S4[LED RGB]
+        S4 --> S5["Premier rendu :<br/>« En attente du PC »"]
+    end
+    subgraph loop["loop() · toutes les 10 ms"]
+        direction TB
+        L1["pollSerial()<br/>lit les octets reçus"] --> L2{Ligne complète ?}
+        L2 -- oui --> L3["handleLine()<br/>puis render()"]
+        L2 -- non --> L4{5 s écoulées ?}
+        L3 --> L4
+        L4 -- oui --> L5["render() + updateLed()"]
+    end
+    setup --> loop
+</pre>
+        <figcaption>Le firmware ne bloque jamais : il lit l'USB, puis rend la main.</figcaption>
+      </figure>
+    </section>
+
+    <section id="outils">
+      <h2><span class="n">01</span>Outils et bibliothèques</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Élément</th><th>Version</th><th>Rôle</th></tr></thead>
+          <tbody>
+            <tr><td>arduino-cli</td><td>1.5</td><td>Compiler et téléverser en ligne de commande, sans l'IDE Arduino</td></tr>
+            <tr><td>Core <code>esp32:esp32</code></td><td>3.3.12</td><td>Support de l'ESP32-C6 par Espressif. Le C6 exige la version 3.x</td></tr>
+            <tr><td>Adafruit ST7735 and ST7789</td><td>1.11</td><td>Pilote de l'écran. Gère tout seul le décalage d'une dalle de 172 px</td></tr>
+            <tr><td>Adafruit GFX</td><td>1.12</td><td>Primitives de dessin (texte, rectangles arrondis…) et polices</td></tr>
+            <tr><td>Adafruit NeoPixel</td><td>1.15</td><td>Pilote de la LED RGB adressable</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout info">
+        <b>Pourquoi Arduino et pas ESP-IDF ?</b>
+        <p>ESP-IDF, le framework officiel d'Espressif, est plus puissant, mais bien plus lourd à installer et à prendre en main. Pour un afficheur, Arduino suffit largement. Les démos LVGL de Waveshare restent disponibles si l'on veut plus tard une interface plus riche.</p>
+      </div>
+    </section>
+
+    <section id="ecran">
+      <h2><span class="n">02</span>Allumer l'écran</h2>
+      <p>L'écran est relié en <strong>SPI</strong>, un bus série rapide à 4 fils. La bibliothèque a besoin de connaître les broches utilisées :</p>
+      <div class="code">
+        <div class="code-head"><span class="file">claude_usage.ino · broches et initialisation</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-cpp">#define PIN_MOSI 6     // données vers l'écran
+#define PIN_SCLK 7     // horloge SPI
+#define PIN_MISO 5     // données depuis la carte TF (inutile pour l'écran)
+#define PIN_LCD_CS 14  // « c'est à toi » : sélection de l'écran
+#define PIN_LCD_DC 15  // commande (0) ou donnée (1)
+#define PIN_LCD_RST 21 // reset matériel de l'écran
+#define PIN_LCD_BL 22  // rétroéclairage
+
+Adafruit_ST7789 tft(&amp;SPI, PIN_LCD_CS, PIN_LCD_DC, PIN_LCD_RST);
+
+void setup() {
+  pinMode(PIN_LCD_BL, OUTPUT);
+  digitalWrite(PIN_LCD_BL, HIGH);          // sans lumière, on ne voit rien
+
+  SPI.begin(PIN_SCLK, PIN_MISO, PIN_MOSI);
+  tft.init(172, 320);                      // décalage de 34 px calculé par la lib
+  tft.setSPISpeed(40000000);               // 40 MHz
+  tft.setRotation(1);                      // paysage : 320 x 172
+}</code></pre>
+      </div>
+
+      <h3>Le décalage de 34 pixels</h3>
+      <p>Le contrôleur ST7789 est conçu pour des dalles de <strong>240 × 320</strong>. Celle-ci ne fait que <strong>172</strong> pixels de large, centrée dans la mémoire du contrôleur. Il faut donc décaler chaque dessin de (240 − 172) / 2 = <strong>34 pixels</strong>. Sinon, l'image est coupée d'un côté et des pixels parasites apparaissent de l'autre.</p>
+      <figure class="diagram">
+        <svg viewBox="0 0 900 260" role="img" aria-label="La mémoire du ST7789 fait 240 colonnes, la dalle visible 172, décalée de 34">
+          <rect x="40" y="30" width="480" height="190" rx="6" class="d-box-2"/>
+          <rect x="108" y="30" width="344" height="190" class="d-acc"/>
+          <text x="280" y="120" class="d-title" text-anchor="middle">172 colonnes visibles</text>
+          <text x="280" y="142" class="d-text" text-anchor="middle">la dalle IPS</text>
+          <text x="74" y="130" class="d-mono" text-anchor="middle">34</text>
+          <text x="486" y="130" class="d-mono" text-anchor="middle">34</text>
+          <text x="40" y="20" class="d-mono">colonne 0</text>
+          <text x="520" y="20" class="d-mono" text-anchor="end">239</text>
+          <text x="280" y="244" class="d-text" text-anchor="middle">mémoire du ST7789 : 240 colonnes</text>
+          <text x="570" y="70" class="d-title" style="font-size:14px">init(172, 320) suffit :</text>
+          <text x="570" y="96" class="d-text">la bibliothèque Adafruit calcule</text>
+          <text x="570" y="116" class="d-mono-acc">_colstart = (240 - 172) / 2 = 34</text>
+          <text x="570" y="146" class="d-text">Vérifié au premier allumage grâce à</text>
+          <text x="570" y="166" class="d-text">un cadre dessiné sur les quatre bords</text>
+          <text x="570" y="186" class="d-text">du Hello World : rien n'était coupé.</text>
+        </svg>
+      </figure>
+    </section>
+
+    <section id="rendu">
+      <h2><span class="n">03</span>Dessiner sans scintiller</h2>
+      <p>Si l'on efface l'écran puis que l'on redessine élément par élément, l'œil voit l'écran clignoter au noir à chaque mise à jour. La solution classique est le <strong>rendu hors écran</strong> (double buffering) : on dessine dans une image en mémoire, puis on envoie cette image entière d'un coup.</p>
+      <div class="code">
+        <div class="code-head"><span class="file">claude_usage.ino · canvas</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-cpp">GFXcanvas16 canvas(W, H);  // image 320 x 172 en mémoire, 16 bits par pixel
+
+static void render() {
+  canvas.fillScreen(COL_BG);
+  // ... tout le dessin se fait dans canvas ...
+  tft.drawRGBBitmap(0, 0, canvas.getBuffer(), W, H);  // envoi d'un bloc
+}</code></pre>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Calcul</th><th>Valeur</th></tr></thead>
+          <tbody>
+            <tr><td>Taille de l'image : 320 × 172 pixels × 2 octets (couleur RGB565)</td><td><strong>110 080 octets</strong> (≈ 108 Ko)</td></tr>
+            <tr><td>Mémoire vive de l'ESP32-C6 (sans PSRAM)</td><td>512 Ko, dont ≈ 310 Ko libres pour le programme</td></tr>
+            <tr><td>Temps d'envoi à 40 MHz : 110 080 × 8 bits / 40 000 000</td><td><strong>≈ 22 ms</strong>, invisible à l'œil</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout info">
+        <b>RGB565, c'est quoi ?</b>
+        <p>Chaque pixel tient sur 16 bits : 5 pour le rouge, 6 pour le vert (l'œil y est plus sensible), 5 pour le bleu. Le firmware convertit les couleurs habituelles avec <code>c565(r, g, b)</code>. Par exemple, l'orange de Claude <code>#D97757</code> devient <code>c565(217, 119, 87)</code>.</p>
+      </div>
+    </section>
+
+    <section id="layout">
+      <h2><span class="n">04</span>La mise en page</h2>
+      <p>L'écran fait 320 × 172 pixels en paysage. Chaque zone a une position fixe :</p>
+      <figure class="diagram">
+        <svg class="svg-big-notes" viewBox="0 0 940 390" role="img" aria-label="Plan de l'écran avec les coordonnées de chaque zone">
+          <rect x="20" y="20" width="640" height="344" rx="10" fill="#0a0a0e" stroke="#343442"/>
+          <!-- en-tête -->
+          <rect x="20" y="20" width="640" height="58" class="d-acc" style="opacity:.55"/>
+          <text x="40" y="64" style="fill:#d97757;font:700 34px Arial">Claude</text>
+          <text x="166" y="64" style="fill:#8c919e;font:26px Arial">usage</text>
+          <circle cx="628" cy="50" r="12" fill="#22a05a"/>
+          <!-- jauge 1 -->
+          <rect x="20" y="84" width="640" height="120" class="d-blue" style="opacity:.35"/>
+          <text x="40" y="112" style="fill:#8c919e;font:700 24px Arial">SESSION 5 H</text>
+          <text x="640" y="118" style="fill:#d97757;font:700 32px Arial" text-anchor="end">29%</text>
+          <rect x="40" y="128" width="600" height="32" rx="10" fill="#282a34"/>
+          <rect x="40" y="128" width="174" height="32" rx="10" fill="#d97757"/>
+          <rect x="268" y="122" width="3" height="44" fill="#ebebf0"/>
+          <text x="40" y="194" style="fill:#8c919e;font:24px Arial">14:50</text>
+          <!-- jauge 2 -->
+          <rect x="20" y="208" width="640" height="120" class="d-green" style="opacity:.3"/>
+          <text x="40" y="236" style="fill:#8c919e;font:700 24px Arial">SEMAINE</text>
+          <text x="640" y="242" style="fill:#d97757;font:700 32px Arial" text-anchor="end">29%</text>
+          <rect x="40" y="252" width="600" height="32" rx="10" fill="#282a34"/>
+          <rect x="40" y="252" width="174" height="32" rx="10" fill="#d97757"/>
+          <rect x="138" y="246" width="3" height="44" fill="#ebebf0"/>
+          <text x="40" y="318" style="fill:#8c919e;font:24px Arial">jeudi 18:00</text>
+          <!-- pied -->
+          <text x="40" y="352" style="fill:#6e737d;font:16px monospace">Releve a 10:43</text>
+          <!-- annotations -->
+          <text x="684" y="44" class="d-mono-acc">y 0 → 30</text>
+          <text x="684" y="62" class="d-text">En-tête : titre,</text>
+          <text x="684" y="78" class="d-text">pastille d'état des services</text>
+          <text x="684" y="112" class="d-mono-acc">drawGauge(32, …)</text>
+          <text x="684" y="130" class="d-text">libellé à y+14, % à y+17</text>
+          <text x="684" y="148" class="d-text">barre à y+22, 16 px de haut</text>
+          <text x="684" y="166" class="d-text">heure de remise à zéro</text>
+          <text x="684" y="184" class="d-text">à y+54</text>
+          <text x="684" y="236" class="d-mono-acc">drawGauge(94, …)</text>
+          <text x="684" y="254" class="d-text">même fonction, décalée</text>
+          <text x="684" y="272" class="d-text">de 62 pixels</text>
+          <text x="684" y="346" class="d-mono-acc">y 161</text>
+          <text x="684" y="364" class="d-text">Pied : relevé ou erreur</text>
+        </svg>
+        <figcaption>Le plan est dessiné à l'échelle 2. Les deux jauges sont produites par la même fonction, avec un décalage vertical.</figcaption>
+      </figure>
+      <p>Les polices viennent d'Adafruit GFX : <code>FreeSansBold12pt7b</code> pour les pourcentages, <code>FreeSans9pt7b</code> pour le texte. Le suffixe <strong>7b</strong> signifie « 7 bits », c'est-à-dire l'ASCII seul, sans accents. C'est pour cette raison que le pont retire les accents des messages.</p>
+    </section>
+
+    <section id="reception">
+      <h2><span class="n">05</span>Recevoir une trame</h2>
+      <p>Les octets arrivent un par un sur l'USB. <code>pollSerial()</code> les accumule dans un tampon jusqu'au retour à la ligne, puis confie la ligne complète à <code>handleLine()</code> :</p>
+      <div class="code">
+        <div class="code-head"><span class="file">claude_usage.ino · pollSerial</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-cpp">static void pollSerial() {
+  static char line[200];
+  static size_t len = 0;
+  while (Serial.available()) {
+    char c = Serial.read();
+    if (c == '\n' || c == '\r') {
+      if (len) {
+        line[len] = 0;
+        handleLine(line);
+        len = 0;
+        render();      // redessin immédiat : la nouvelle valeur s'affiche sans attendre
+        updateLed();
+      }
+    } else if (len &lt; sizeof(line) - 1) {
+      line[len++] = c;  // au-delà de 199 caractères, le surplus est ignoré
+    }
+  }
+}</code></pre>
+      </div>
+      <p>Pour découper la ligne, la fonction classique <code>strtok</code> ne convient pas : elle <strong>fusionne les séparateurs consécutifs</strong>, si bien que le champ « erreur » vide décalerait tout. Le firmware fait donc son propre découpage, qui conserve les champs vides :</p>
+      <div class="code">
+        <div class="code-head"><span class="file">claude_usage.ino · handleLine</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-cpp">static void handleLine(char *line) {
+  if (line[0] == '?') {                       // identification
+    Serial.println("MINIDISPLAY claude_usage 1");
+    return;
+  }
+  if (line[0] != 'Q' || line[1] != ';') return;
+
+  char *f[9];
+  int n = 0;
+  char *p = line;
+  while (n &lt; 9) {                            // découpage qui conserve les champs vides
+    f[n++] = p;
+    char *sep = strchr(p, ';');
+    if (!sep) break;
+    *sep = 0;                                 // remplace ';' par une fin de chaîne
+    p = sep + 1;
+  }
+  if (n &lt; 8) return;                         // trame incomplète : ignorée
+
+  st.pcNow = strtoul(f[1], NULL, 10);
+  st.rxMs = millis();                         // instant de réception, pour l'horloge
+  st.five.used = atoi(f[2]);
+  st.five.reset = strtoul(f[3], NULL, 10);
+  st.week.used = atoi(f[4]);
+  st.week.reset = strtoul(f[5], NULL, 10);
+  st.level = atoi(f[6]);
+  st.updated = strtoul(f[7], NULL, 10);
+  snprintf(st.err, sizeof(st.err), "%s", n &gt; 8 ? f[8] : "");
+  st.have = true;
+  Serial.println("OK");
+}</code></pre>
+        <div class="code-note">Le découpage se fait sur place : chaque <code>;</code> est remplacé par un octet nul, et <code>f[i]</code> pointe sur le début de chaque champ. Aucune copie, aucune allocation.</div>
+      </div>
+    </section>
+
+    <section id="horloge">
+      <h2><span class="n">06</span>Une horloge sans horloge</h2>
+      <p>La carte n'a pas d'horloge temps réel, et pas d'Internet pour se mettre à l'heure. Elle dispose seulement de <code>millis()</code> : le nombre de millisecondes écoulées depuis son démarrage. Cela suffit, à condition de mémoriser à quel moment est arrivée la dernière heure connue :</p>
+      <div class="code">
+        <div class="code-head"><span class="file">claude_usage.ino · nowLocal</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-cpp">static uint32_t nowLocal() {
+  return st.pcNow + (millis() - st.rxMs) / 1000;
+}</code></pre>
+      </div>
+      <p>Exemple : la trame annonce 10:43:09, reçue quand <code>millis()</code> valait 600 000. Douze secondes plus tard, <code>millis()</code> vaut 612 000 et <code>nowLocal()</code> renvoie 10:43:21. Toutes les 30 secondes, une nouvelle trame remet les pendules à l'heure : la dérive du quartz n'a pas le temps de s'accumuler.</p>
+      <p>Pour transformer ce nombre en « 21:00 » ou « jeudi 18:00 », le firmware utilise <code>gmtime_r()</code>, la fonction standard qui convertit des secondes en date. Le pont a déjà fourni des secondes « en heure locale » (voir <a href="pont.html#heures">le piège des heures</a>), donc aucun fuseau n'intervient ici.</p>
+    </section>
+
+    <section id="jauges">
+      <h2><span class="n">07</span>Le calcul des jauges</h2>
+      <h3>Le repère de temps</h3>
+      <p>Le trait blanc indique quelle part de la fenêtre est déjà écoulée. La fenêtre a commencé <em>durée</em> heures avant la remise à zéro :</p>
+      <div class="code">
+        <div class="code-head"><span class="file">claude_usage.ino · windowFraction</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-cpp">// Part écoulée de la fenêtre (0..1), ou -1 si l'heure de reset est inconnue.
+static float windowFraction(const Gauge &amp;g, uint32_t hours) {
+  if (!g.reset || !st.have) return -1;
+  const float span = hours * 3600.0f;
+  float f = ((float)nowLocal() - ((float)g.reset - span)) / span;
+  return f &lt; 0 ? 0 : (f &gt; 1 ? 1 : f);
+}</code></pre>
+      </div>
+      <h3>La couleur</h3>
+      <p>La couleur ne dépend pas de la consommation brute, mais de l'<strong>écart signé</strong> entre la consommation et le repère. Elle reste dans la palette de Claude et change par nuances, sans paliers brusques :</p>
+      <div class="code">
+        <div class="code-head"><span class="file">claude_usage.ino · gaugeRGB</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-cpp">const RGB RGB_TERRA = { 217, 119, 87 };   // dans le rythme : terracotta Claude
+const RGB RGB_RED = { 229, 72, 77 };      // en avance sur le rythme : risque de manquer
+const RGB RGB_CLOUD = { 177, 173, 161 };  // en retard sur le rythme : de la marge
+
+static RGB gaugeRGB(const Gauge &amp;g, float frac) {
+  if (g.used &lt; 0) return RGB_UNKNOWN;        // valeur inconnue
+  if (frac &lt; 0) return RGB_TERRA;            // reset inconnu : pas de repère
+  const float gap = g.used - 100.0f * frac;  // &gt; 0 : on consomme plus vite que le temps
+  float t = (fabsf(gap) - 10.0f) / 25.0f;    // 0 jusqu'à 10 points, 1 à 35 points
+  t = t &lt; 0 ? 0 : (t &gt; 1 ? 1 : t);
+  return lerpRGB(RGB_TERRA, gap &gt; 0 ? RGB_RED : RGB_CLOUD, t);
+}</code></pre>
+        <div class="code-note"><code>lerpRGB</code> mélange deux couleurs canal par canal : avec <code>t = 0,5</code>, on obtient la teinte à mi-chemin. La même nuance sert à l'écran et à la LED.</div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Écart avec le repère</th><th>Couleur</th><th>Lecture</th></tr></thead>
+          <tbody>
+            <tr><td>Moins de 10 points</td><td><span style="color:#d97757">■</span> terracotta</td><td>Dans le rythme</td></tr>
+            <tr><td>En avance de 10 à 35 points</td><td><span style="color:#d97757">■</span>→<span style="color:#e5484d">■</span> vers le rouge</td><td>Consommation trop rapide : risque de manquer avant la remise à zéro</td></tr>
+            <tr><td>En retard de 10 à 35 points</td><td><span style="color:#d97757">■</span>→<span style="color:#b1ada1">■</span> vers le gris chaud</td><td>De la marge : le quota ne sera pas épuisé</td></tr>
+            <tr><td>Au-delà de 35 points</td><td>rouge ou gris chaud plein</td><td>Écart franc</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout key">
+        <b>Exemple chiffré</b>
+        <p>Session de 5 h, remise à zéro à 14:50, il est 12:20. La fenêtre a commencé à 09:50, et 2 h 30 sur 5 h sont écoulées : le repère est à <strong>50 %</strong>. La consommation est de <strong>28 %</strong>, soit 22 points <em>de retard</em> sur le repère : t = (22 − 10) / 25 ≈ 0,5. La jauge est à <strong>mi-chemin entre terracotta et gris chaud</strong> : il reste de la marge.</p>
+      </div>
+      <div class="callout info">
+        <b>Pourquoi avoir quitté le bleu, le vert et le rouge ?</b>
+        <p>La première version reprenait la règle du widget PC : l'écart comptait <em>dans les deux sens</em>, si bien qu'un quota largement inutilisé virait au rouge, comme un quota sur le point d'être épuisé. La nouvelle règle distingue le sens de l'écart : seul le rouge signale un vrai risque. Et sur un écran dédié et rétroéclairé, la palette de Claude rend l'ensemble plus cohérent.</p>
+      </div>
+      <p>Le trait blanc est dessiné par-dessus la barre, avec un liseré de la couleur du fond de part et d'autre (3 px), pour rester visible quelle que soit la couleur dessous.</p>
+    </section>
+
+    <section id="etats">
+      <h2><span class="n">08</span>Les états dégradés</h2>
+      <p>Le pied d'écran raconte toujours ce qui se passe. Les cas sont testés dans cet ordre :</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Condition</th><th>Pied d'écran</th><th>Jauges</th></tr></thead>
+          <tbody>
+            <tr><td>Aucune trame depuis le démarrage</td><td>« En attente du PC (lancez le pont USB)... »</td><td>« -- » grisées</td></tr>
+            <tr><td>Dernière trame il y a plus de 2 min</td><td>« PC deconnecte depuis N min »</td><td>Grisées, dernières valeurs</td></tr>
+            <tr><td>Le champ erreur n'est pas vide</td><td>Le message, en orange</td><td>Normales, ou « -- »</td></tr>
+            <tr><td>Tout va bien</td><td>« Releve a 10:43 »</td><td>Normales</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="code">
+        <div class="code-head"><span class="file">claude_usage.ino · isStale</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-cpp">#define STALE_MS 120000UL  // au-delà, le PC est considéré déconnecté
+
+static bool isStale() {
+  return !st.have || millis() - st.rxMs &gt; STALE_MS;
+}</code></pre>
+        <div class="code-note">La soustraction <code>millis() - st.rxMs</code> reste juste même quand <code>millis()</code> repasse par zéro, au bout d'environ 49 jours, grâce à l'arithmétique des entiers non signés.</div>
+      </div>
+    </section>
+
+    <section id="led">
+      <h2><span class="n">09</span>La LED</h2>
+      <p>La LED RGB sur GPIO8 éclaire la plaque d'acrylique. Elle reprend la nuance exacte de la jauge de session, avec une luminosité réduite à 25 sur 255 pour ne pas éblouir. Elle s'éteint quand il n'y a pas de données.</p>
+      <div class="code">
+        <div class="code-head"><span class="file">claude_usage.ino · updateLed</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-cpp">static void updateLed() {
+  uint32_t c = 0;                                   // éteinte par défaut
+  if (!isStale() &amp;&amp; st.five.used &gt;= 0) {
+    const RGB k = gaugeRGB(st.five, windowFraction(st.five, 5));
+    c = rgb.Color(k.r, k.g, k.b);                   // même nuance que la jauge
+  }
+  rgb.setPixelColor(0, c);
+  rgb.show();
+}</code></pre>
+      </div>
+    </section>
+
+    <section id="bouton">
+      <h2><span class="n">10</span>Le bouton BOOT</h2>
+      <p>L'écran n'est pas tactile. La carte a deux boutons : <strong>RESET</strong> redémarre la puce, et <strong>BOOT</strong>, relié à GPIO9, ne sert qu'au démarrage. Une fois le programme lancé, BOOT est donc un bouton libre. Aucune soudure n'est nécessaire.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Geste</th><th>Effet</th></tr></thead>
+          <tbody>
+            <tr><td>Appui court (moins de 0,7 s)</td><td>Vue suivante : <strong>jauges</strong> → <strong>gros chiffres</strong> → <strong>horloge</strong> → <strong>crédits ElevenLabs</strong> → <strong>PC</strong> → <strong>Pomodoro</strong> → <strong>PALais SIAM</strong> → jauges…</td></tr>
+            <tr><td>Appui long (0,7 s)</td><td>Thème suivant : Matrix, MS-DOS, Windows 98, Ubuntu, Claude Code (par défaut), macOS clair et Aperture Science. Un message le confirme en pied d'écran. (Le réglage de luminosité reste dans le code, désactivé par <code>LONG_PRESS_BRIGHTNESS</code>.)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Six points en bas à droite indiquent la vue affichée. Vue, thème et luminosité sont enregistrées en Flash : elles survivent à un débranchement.</p>
+      <div class="code">
+        <div class="code-head"><span class="file">claude_usage.ino · pollButton</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-cpp">// Appui court (relâché avant 700 ms) : vue suivante. Appui long : thème suivant,
+// déclenché dès les 700 ms atteintes, sans attendre le relâchement.
+static void pollButton() {
+  static bool down = false, longDone = false;
+  static uint32_t t0 = 0, lastChange = 0;
+  const bool pressed = digitalRead(PIN_BOOT) == LOW;  // actif à l'état bas
+  const uint32_t now = millis();
+
+  if (pressed != down &amp;&amp; now - lastChange &gt; 30) {     // anti-rebond
+    lastChange = now;
+    down = pressed;
+    if (down) {
+      t0 = now;
+      longDone = false;
+    } else if (!longDone) {
+      nextView();
+    }
+  }
+  if (down &amp;&amp; !longDone &amp;&amp; now - t0 &gt;= LONG_PRESS_MS) {
+    longDone = true;
+    if (LONG_PRESS_BRIGHTNESS) nextBrightness();
+    else nextTheme();
+  }
+}</code></pre>
+        <div class="code-note"><strong>Anti-rebond :</strong> un contact mécanique « rebondit » pendant quelques millisecondes et produit plusieurs fronts. On ignore donc tout changement survenu moins de 30 ms après le précédent.</div>
+      </div>
+      <h3>Mémoriser les réglages</h3>
+      <p>La bibliothèque <code>Preferences</code> écrit de petites valeurs dans une zone de la Flash prévue pour cela (la NVS), sous forme de paires clé-valeur :</p>
+      <div class="code">
+        <div class="code-head"><span class="file">claude_usage.ino · setup</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-cpp">prefs.begin("mdma", false);                          // espace de noms « mdma »
+view = prefs.getUChar("view", VIEW_GAUGES) % VIEW_COUNT;
+blIndex = prefs.getUChar("bl", 0) % 3;
+
+ledcAttach(PIN_LCD_BL, 5000, 8);                     // rétroéclairage en PWM 5 kHz, 8 bits
+ledcWrite(PIN_LCD_BL, BL_LEVELS[blIndex]);           // 255, 110 ou 35</code></pre>
+        <div class="code-note">La luminosité passe par la <strong>PWM</strong> : le rétroéclairage est allumé et éteint 5000 fois par seconde, et la proportion du temps allumé fixe la luminosité perçue. Le <code>% VIEW_COUNT</code> protège contre une valeur corrompue en Flash.</div>
+      </div>
+      <div class="callout warn">
+        <b>Ne pas maintenir BOOT en branchant la carte</b>
+        <p>Maintenu au moment du démarrage, BOOT fait entrer la puce en mode téléchargement : l'écran reste noir. Il suffit de rebrancher la carte, ou d'appuyer sur RESET.</p>
+      </div>
+    </section>
+
+    <section id="pieges">
+      <h2><span class="n">11</span>Pièges rencontrés</h2>
+      <h3>« 'Gauge' does not name a type »</h3>
+      <p>Première compilation, première erreur. Avant de compiler un <code>.ino</code>, l'outil Arduino <strong>génère automatiquement les déclarations</strong> de toutes les fonctions et les place en haut du fichier, donc <em>avant</em> la définition des types qu'elles utilisent. Une fonction qui prend un <code>Gauge</code> devient alors illisible pour le compilateur.</p>
+      <p><strong>Solution :</strong> déplacer les types dans un en-tête <code>state.h</code>, inclus en haut du fichier. L'en-tête est lu avant les déclarations générées.</p>
+      <div class="code">
+        <div class="code-head"><span class="file">firmware/claude_usage/state.h</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-cpp">// Types partagés : dans un en-tête pour que les prototypes générés par Arduino les voient.
+#pragma once
+#include &lt;stdint.h&gt;
+
+struct Gauge {
+  int used;        // %, -1 = inconnu
+  uint32_t reset;  // heure locale du reset, 0 = inconnue
+};
+
+struct State {
+  bool have = false;
+  uint32_t pcNow = 0;  // horloge du PC au moment de la réception
+  uint32_t rxMs = 0;   // millis() à la réception
+  Gauge five = { -1, 0 };
+  Gauge week = { -1, 0 };
+  int level = -1;
+  uint32_t updated = 0;  // heure du dernier relevé de quota réussi
+  char err[72] = "";
+};</code></pre>
+      </div>
+
+      <h3>« usage » par-dessus « Claude »</h3>
+      <p>Sur la première photo, le mot « usage » chevauchait « Claude ». La largeur de « Claude » était mesurée <strong>après</strong> le passage à la petite police, donc trop courte. Les mesures de texte dépendent de la police active au moment de l'appel.</p>
+      <div class="code">
+        <div class="code-head"><span class="file">Avant / après</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-cpp">// Avant : textWidth() mesure avec FreeSans9pt, pas avec la police du titre
+canvas.setFont(&amp;FreeSans9pt7b);
+drawLeft("usage", MX + textWidth("Claude") + 6, 22, COL_DIM);
+
+// Après : on mesure tant que la police du titre est active
+drawLeft("Claude", MX, 22, COL_CLAUDE);
+const int16_t titleW = textWidth("Claude");
+canvas.setFont(&amp;FreeSans9pt7b);
+drawLeft("usage", MX + titleW + 6, 22, COL_DIM);</code></pre>
+      </div>
+    </section>
+
+    <section id="compiler">
+      <h2><span class="n">12</span>Compiler et téléverser</h2>
+      <div class="code">
+        <div class="code-head"><span class="file">Git Bash, depuis la racine du projet</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-bash">A="$LOCALAPPDATA/arduino-cli/arduino-cli.exe"
+FQBN="esp32:esp32:esp32c6:CDCOnBoot=cdc"
+
+powershell -ExecutionPolicy Bypass -File bridge/Stop-MiniDisplayBridge.ps1   # libère le port
+"$A" compile --fqbn "$FQBN" firmware/claude_usage
+"$A" upload  --fqbn "$FQBN" -p COM3 firmware/claude_usage</code></pre>
+        <div class="code-note"><code>CDCOnBoot=cdc</code> fait passer <code>Serial</code> par l'USB natif : c'est indispensable pour que la carte entende le pont. Le programme occupe environ 360 Ko, soit 27 % de l'espace disponible.</div>
+      </div>
+      <p>Le pas à pas complet, depuis un PC vierge, se trouve dans le <a href="guide.html">guide</a>.</p>
+    </section>
+
+    <div class="pager">
+      <a href="pont.html"><small>← Précédent</small><b>Le pont PC</b></a>
+      <a class="next" href="materiel.html"><small>Suivant →</small><b>La carte en détail</b></a>
+    </div>
+  </article>
+</div>
+
+<footer>
+  <div class="wrap">
+    <span>MDMA - MiniDisplay MiniAutomations · 2026 Q4 · Projet perso</span>
+    <span><a href="guide.html">Refaire le projet pas à pas</a></span>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script src="js/docs.js"></script>
+</body>
+</html>

@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="color-scheme" content="dark light">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MDMA - MiniDisplay MiniAutomations</title>
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <meta name="description" content="Fonctionnement détaillé du pont PowerShell de MDMA : jeton, API de quota, rate-limit, protocole série, détection de la carte.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+  <link rel="stylesheet" href="style.css">
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="docs.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap">
+    <a class="brand" href="index.html" title="MDMA : MiniDisplay MiniAutomations"><span class="brand-mark" aria-hidden="true"></span>MDMA</a>
+    <div class="nav-links">
+      <div class="nav-drop">
+        <button type="button" class="on" aria-haspopup="true">Documentation</button>
+        <div class="nav-menu">
+          <a href="architecture.html"><span>1</span>Architecture</a>
+          <a href="pont.html" aria-current="page"><span>2</span>Le pont PC</a>
+          <a href="firmware.html"><span>3</span>Le firmware</a>
+          <a href="materiel.html"><span>4</span>La carte</a>
+          <a href="guide.html"><span>5</span>Guide pas à pas</a>
+        </div>
+      </div>
+      <a href="boitiers.html">Boîtiers</a>
+      <a href="https://github.com/ilsnpn/minidisplay-miniautomations" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="doc-hero">
+  <div class="wrap">
+    <span class="kicker">Comprendre · 2 / 5</span>
+    <h1>Le pont : la passerelle entre Claude et la carte</h1>
+    <p class="lead">Un script PowerShell d'environ 300 lignes qui tourne en arrière-plan. Il récupère le quota, se protège des refus de l'API, trouve la carte sur l'USB et lui envoie une ligne de texte toutes les 30 secondes.</p>
+    <div class="doc-meta"><span>Lecture : 15 min</span><span>Fichier : bridge/MiniDisplayBridge.ps1</span><span>PowerShell 5.1+</span></div>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="toc">
+    <div class="cap">Sur cette page</div>
+    <a href="#role">Son rôle</a>
+    <a href="#boucle">La boucle principale</a>
+    <a href="#jeton">1 · Le jeton</a>
+    <a href="#api">2 · L'appel à l'API</a>
+    <a href="#ratelimit">3 · Le rate-limit</a>
+    <a href="#status">4 · L'état des services</a>
+    <a href="#heures">5 · Le piège des heures</a>
+    <a href="#protocole">6 · Le protocole série</a>
+    <a href="#port">7 · Trouver la carte</a>
+    <a href="#lancement">Lancement et arrêt</a>
+    <a href="#elevenlabs">Option ElevenLabs</a>
+    <a href="#journal">Le journal</a>
+    <a href="#depannage">Dépannage</a>
+  </aside>
+
+  <article class="prose">
+
+    <section id="role">
+      <h2><span class="n">00</span>Son rôle</h2>
+      <p>Le pont est le <strong>seul</strong> programme qui parle à la fois à Internet et à la carte. Il fait le travail compliqué (authentification, erreurs réseau, fuseaux horaires) pour que le firmware n'ait plus qu'à afficher des nombres.</p>
+      <div class="callout key">
+        <b>Ce qu'il faut retenir</b>
+        <p>Entrée : le jeton de Claude Code et deux URL. Sortie : une ligne de texte comme <code>Q;1792233789;29;1792248600;29;1792692000;0;1792233787;</code> envoyée sur le port COM de la carte.</p>
+      </div>
+      <p>Il reprend volontairement la méthode du widget <code>ClaudeStatus</code> : même endpoint, même jeton, mêmes garde-fous. Le widget a déjà prouvé que cette méthode fonctionne.</p>
+    </section>
+
+    <section id="boucle">
+      <h2><span class="n">01</span>La boucle principale</h2>
+      <p>Le script est une boucle infinie qui se réveille toutes les demi-secondes et se pose trois questions :</p>
+      <figure class="diagram">
+<pre class="mermaid">
+flowchart TD
+    A([Démarrage]) --> C
+    B(["Pause<br/>500 ms"]) --> C
+    C["État des services dû ?<br/><small>toutes les 5 min</small>"] -- oui --> D[Update-Status]
+    C -- non --> E
+    D --> E["Quota dû ?<br/><small>5 min, plus après un 429</small>"]
+    E -- oui --> F[Update-Quota]
+    E -- non --> G
+    F --> G["Du nouveau,<br/>ou 30 s écoulées ?"]
+    G -- non --> B
+    G -- oui --> H["Send-Frame<br/><small>succès : +30 s<br/>échec : port fermé, +5 s</small>"]
+    H --> B
+</pre>
+        <figcaption>Aucune tâche ne bloque les autres : chaque action a sa propre échéance.</figcaption>
+      </figure>
+      <div class="code">
+        <div class="code-head"><span class="file">bridge/MiniDisplayBridge.ps1 · boucle</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-powershell">while ($true) {
+    $now = Get-Date
+    $changed = $false
+    if ($now -ge $NextStatus) { Update-Status; $changed = $true }
+    if ($now -ge $NextQuota)  {
+        Update-Quota; $changed = $true
+        if ($Quota.Error) { Write-Log "Quota : $($Quota.Error)" }
+        else { Write-Log ("Quota : 5 h {0} %, semaine {1} %" -f $Quota.Five, $Quota.Week) }
+    }
+    if ($changed -or $now -ge $NextSend) {
+        $ok = Send-Frame
+        $NextSend = $now.AddSeconds($(if ($ok) { $SendEverySeconds } else { 5 }))
+        if ($Once) { break }
+    }
+    Start-Sleep -Milliseconds 500
+}</code></pre>
+        <div class="code-note">Trois échéances indépendantes : <code>$NextStatus</code>, <code>$NextQuota</code> et <code>$NextSend</code>. Le paramètre <code>-Once</code> permet un test unique : un envoi, puis le script s'arrête.</div>
+      </div>
+    </section>
+
+    <section id="jeton">
+      <h2><span class="n">02</span>Étape 1 · Trouver le jeton</h2>
+      <p>L'API de quota exige d'être authentifié. Le pont ne demande aucun mot de passe : il réutilise le <strong>jeton OAuth</strong> que Claude Code enregistre sur le PC quand on s'y connecte.</p>
+      <div class="code">
+        <div class="code-head"><span class="file">Get-OauthToken</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-powershell">function Get-OauthToken {
+    if ($env:CLAUDE_CODE_OAUTH_TOKEN) { return ([string]$env:CLAUDE_CODE_OAUTH_TOKEN).Trim() }
+    $f = Join-Path $env:USERPROFILE '.claude\.credentials.json'
+    if (Test-Path $f) {
+        try {
+            $o = (Get-Content -Path $f -Raw -Encoding UTF8) | ConvertFrom-Json
+            if ($o.claudeAiOauth -and $o.claudeAiOauth.accessToken) { return [string]$o.claudeAiOauth.accessToken }
+        } catch { }
+    }
+    return $null
+}</code></pre>
+      </div>
+      <ul>
+        <li><strong>Ordre de recherche :</strong> d'abord la variable d'environnement <code>CLAUDE_CODE_OAUTH_TOKEN</code> si elle existe, sinon le fichier <code>%USERPROFILE%\.claude\.credentials.json</code>, champ <code>claudeAiOauth.accessToken</code>.</li>
+        <li><strong>Relu à chaque appel :</strong> le jeton expire au bout d'une heure environ. Claude Code le renouvelle tout seul dans le fichier, et le pont profite donc toujours de la dernière version.</li>
+      </ul>
+      <div class="callout warn">
+        <b>Limite à connaître</b>
+        <p>Si Claude Code n'a pas tourné depuis plus d'une heure, le jeton est périmé : l'API répond 401 et l'écran affiche « jeton expire, lancez Claude Code ». Il suffit de l'ouvrir un instant.</p>
+      </div>
+      <div class="callout ok">
+        <b>Sécurité</b>
+        <p>Le jeton ne sort du PC que vers <code>api.anthropic.com</code>, en HTTPS. Il n'est jamais écrit dans le journal ni envoyé à la carte.</p>
+      </div>
+    </section>
+
+    <section id="api">
+      <h2><span class="n">03</span>Étape 2 · Interroger l'API de quota</h2>
+      <p>Une simple requête <code>GET</code>, avec trois en-têtes :</p>
+      <div class="code">
+        <div class="code-head"><span class="file">Update-Quota · la requête</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-powershell">$QuotaUrl = 'https://api.anthropic.com/api/oauth/usage'
+
+# Le User-Agent compte : sans lui l'endpoint rate-limite beaucoup plus vite.
+$r = Invoke-Get -Url $QuotaUrl -UA 'claude-code/1.0.0' -Headers @{
+    'Authorization'  = 'Bearer ' + $tok
+    'anthropic-beta' = 'oauth-2025-04-20'
+}</code></pre>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>En-tête</th><th>Valeur</th><th>Rôle</th></tr></thead>
+          <tbody>
+            <tr><td><code>Authorization</code></td><td><code>Bearer &lt;jeton&gt;</code></td><td>Prouve votre identité</td></tr>
+            <tr><td><code>anthropic-beta</code></td><td><code>oauth-2025-04-20</code></td><td>Active l'authentification OAuth sur l'API</td></tr>
+            <tr><td><code>User-Agent</code></td><td><code>claude-code/1.0.0</code></td><td>Constat empirique : sans lui, les refus 429 arrivent beaucoup plus vite</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>La réponse est un JSON. Le pont n'en lit que deux blocs :</p>
+      <div class="code">
+        <div class="code-head"><span class="file">Réponse (extrait simplifié)</span></div>
+<pre><code class="language-json">{
+  "five_hour": { "utilization": 28.0, "resets_at": "2026-10-17T12:50:00+00:00" },
+  "seven_day": { "utilization": 29.0, "resets_at": "2026-10-22T16:00:00+00:00" }
+}</code></pre>
+        <div class="code-note"><code>utilization</code> est un pourcentage, arrondi à l'entier par le pont. <code>resets_at</code> est en <strong>UTC</strong>, ce qui pose un problème traité à l'<a href="#heures">étape 5</a>.</div>
+      </div>
+      <div class="callout warn">
+        <b>Endpoint non documenté</b>
+        <p><code>/api/oauth/usage</code> n'est pas une API publique officielle. C'est celle qu'utilise Claude Code pour afficher l'utilisation. Elle peut changer sans préavis : si un jour l'écran reste sur « quota indisponible », c'est la première piste à vérifier.</p>
+      </div>
+      <p>La requête elle-même passe par <code>System.Net.HttpWebRequest</code> plutôt que par <code>Invoke-RestMethod</code>. Ce choix permet de récupérer proprement le code HTTP en cas d'erreur, de forcer TLS 1.2 sur PowerShell 5.1 et d'utiliser le proxy système, ce qui est utile en entreprise.</p>
+    </section>
+
+    <section id="ratelimit">
+      <h2><span class="n">04</span>Étape 3 · Se protéger du rate-limit</h2>
+      <p>L'endpoint refuse les appels trop fréquents avec un code <strong>429 Too Many Requests</strong>. Le pont applique deux garde-fous :</p>
+      <ol>
+        <li><strong>Jamais plus d'un appel toutes les 5 minutes</strong>, quoi qu'il arrive.</li>
+        <li><strong>Attente exponentielle</strong> après un refus : l'attente double à chaque 429 consécutif, jusqu'à 60 minutes au plus.</li>
+      </ol>
+      <figure class="diagram">
+<pre class="mermaid">
+stateDiagram-v2
+    [*] --> Normal
+    Normal --> Normal : 200 OK, appel suivant dans 5 min
+    Normal --> Attente : 429
+    Attente --> Attente : 429 encore, attente doublée
+    Attente --> Normal : 200 OK, compteur remis à zéro
+    Normal --> Jeton : 401 ou 403
+    Jeton --> Normal : nouvel essai dans 15 min
+</pre>
+        <figcaption>Les trois états du relevé de quota.</figcaption>
+      </figure>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Refus consécutifs</th><th>1</th><th>2</th><th>3</th><th>4 et plus</th></tr></thead>
+          <tbody><tr><td>Attente avant le prochain essai</td><td>10 min</td><td>20 min</td><td>40 min</td><td>60 min</td></tr></tbody>
+        </table>
+      </div>
+      <div class="code">
+        <div class="code-head"><span class="file">Update-Quota · gestion des erreurs</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-powershell">if ($r.Code -eq 429) {
+    if ($script:QuotaBackoff -lt $QuotaMinMinutes) { $script:QuotaBackoff = $QuotaMinMinutes }
+    $script:QuotaBackoff = [math]::Min($QuotaMaxMinutes, $script:QuotaBackoff * 2)
+    $script:NextQuota = $now.AddMinutes($script:QuotaBackoff)
+    $script:Quota.Error = "trop d'appels, nouvel essai dans $($script:QuotaBackoff) min"
+    return
+}
+if ($r.Code -eq 401 -or $r.Code -eq 403) {
+    $script:Quota.Error = 'jeton expire, lancez Claude Code'
+    $script:NextQuota = $now.AddMinutes(15)
+    return
+}</code></pre>
+      </div>
+      <p>Pendant une attente après un 429, la carte <strong>garde les dernières valeurs connues</strong> : le quota n'a pas pu changer beaucoup. Après un 401, en revanche, les valeurs sont masquées, car elles peuvent être périmées depuis longtemps.</p>
+      <div class="callout info">
+        <b>Widget et pont en même temps</b>
+        <p>Si le widget <code>ClaudeStatus</code> tourne aussi, chacun appelle l'API de son côté, soit deux appels toutes les 5 minutes. En cas de 429 à répétition, il faut couper le quota de l'un des deux.</p>
+      </div>
+    </section>
+
+    <section id="status">
+      <h2><span class="n">05</span>Étape 4 · L'état des services</h2>
+      <p>En parallèle, le pont lit la page publique <code>https://status.claude.com/api/v2/summary.json</code>, sans authentification. Il n'en garde qu'un champ, <code>status.indicator</code>, qu'il traduit en un chiffre pour la pastille de l'écran :</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th><code>indicator</code></th><th>Niveau envoyé</th><th>Pastille</th></tr></thead>
+          <tbody>
+            <tr><td><code>none</code></td><td>0</td><td><span style="color:#22a05a">●</span> verte</td></tr>
+            <tr><td><code>minor</code>, <code>maintenance</code></td><td>1</td><td><span style="color:#eb9614">●</span> orange</td></tr>
+            <tr><td><code>major</code>, <code>critical</code></td><td>2</td><td><span style="color:#d22d2d">●</span> rouge</td></tr>
+            <tr><td>site injoignable</td><td>-1</td><td><span style="color:#8c919b">●</span> grise</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="heures">
+      <h2><span class="n">06</span>Étape 5 · Le piège des heures</h2>
+      <p>L'API donne les heures de remise à zéro en <strong>UTC</strong>. Or la carte n'a ni fuseau horaire, ni règle d'heure d'été, ni connexion à un serveur de temps. Lui apprendre tout cela coûterait cher. L'astuce est de faire tout le travail sur le PC :</p>
+      <figure class="diagram">
+        <svg viewBox="0 0 900 210" role="img" aria-label="Conversion d'une heure UTC en secondes heure locale">
+          <defs><marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="d-arrow-acc"/></marker></defs>
+          <rect x="10" y="40" width="250" height="110" rx="12" class="d-box"/>
+          <text x="26" y="68" class="d-mono">API (UTC)</text>
+          <text x="26" y="100" class="d-title" style="font-size:16px">2026-10-17 12:50 Z</text>
+          <text x="26" y="128" class="d-text">heure universelle</text>
+
+          <rect x="325" y="40" width="250" height="110" rx="12" class="d-acc"/>
+          <text x="341" y="68" class="d-mono-acc">PONT · ToLocalTime()</text>
+          <text x="341" y="100" class="d-title" style="font-size:16px">14:50 heure de Paris</text>
+          <text x="341" y="128" class="d-text">puis comptée « à plat » :</text>
+          <text x="341" y="144" class="d-mono">1792248600 s</text>
+
+          <rect x="640" y="40" width="250" height="110" rx="12" class="d-box"/>
+          <text x="656" y="68" class="d-mono">CARTE · gmtime_r()</text>
+          <text x="656" y="100" class="d-title" style="font-size:16px">« reset 14:50 »</text>
+          <text x="656" y="128" class="d-text">aucun fuseau à connaître</text>
+
+          <path d="M262 95 L320 95" class="d-line-acc" marker-end="url(#a2)"/>
+          <path d="M577 95 L635 95" class="d-line-acc" marker-end="url(#a2)"/>
+          <text x="10" y="190" class="d-text">Le nombre envoyé n'est pas un vrai horodatage Unix : c'est l'heure locale écrite comme si elle était en UTC.</text>
+        </svg>
+      </figure>
+      <div class="code">
+        <div class="code-head"><span class="file">ConvertTo-LocalEpoch</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-powershell">$Epoch = New-Object DateTime 1970, 1, 1, 0, 0, 0, ([DateTimeKind]::Unspecified)
+
+function ConvertTo-LocalEpoch {
+    # Secondes depuis 1970 de l'heure locale "a plat" : la carte l'affiche telle quelle.
+    param($Date)
+    if (-not $Date) { return 0 }
+    $d = [datetime]::SpecifyKind([datetime]$Date, [DateTimeKind]::Unspecified)
+    return [int64][math]::Floor(($d - $Epoch).TotalSeconds)
+}</code></pre>
+        <div class="code-note">Le passage à l'heure d'hiver est géré automatiquement, parce que Windows connaît les règles et que le pont reconvertit à chaque appel.</div>
+      </div>
+
+      <h3>L'arrondi à la minute</h3>
+      <p>Premier retour visuel : la semaine affichait « reset jeu. 17:59 » au lieu de 18:00. L'API renvoie en effet parfois <code>17:59:59.9</code>, et la carte tronque les secondes. Le pont arrondit donc à la minute la plus proche :</p>
+      <div class="code">
+        <div class="code-head"><span class="file">ConvertTo-LocalTime</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-powershell">$d = ([datetime]::Parse($Iso, [System.Globalization.CultureInfo]::InvariantCulture, $styles)).ToLocalTime()
+# L'API renvoie souvent 17:59:59.9 pour 18:00 : arrondi a la minute.
+return $d.AddSeconds(30).AddTicks(-($d.AddSeconds(30).Ticks % [TimeSpan]::TicksPerMinute))</code></pre>
+        <div class="code-note">On ajoute 30 s, puis on coupe à la minute : 17:59:59.9 devient 18:00:29.9, puis 18:00:00.</div>
+      </div>
+
+      <h3>Les accents</h3>
+      <p>Les polices du firmware ne contiennent que les caractères ASCII. Un message comme « jeton expiré » afficherait des symboles parasites. Le pont décompose donc chaque lettre accentuée (é → e + ´), retire l'accent, et supprime au passage le <code>;</code>, qui sert de séparateur dans la trame :</p>
+      <div class="code">
+        <div class="code-head"><span class="file">ConvertTo-Ascii</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-powershell">$n = $Text.Normalize([Text.NormalizationForm]::FormD)
+foreach ($c in $n.ToCharArray()) {
+    if ([Globalization.CharUnicodeInfo]::GetUnicodeCategory($c) -eq [Globalization.UnicodeCategory]::NonSpacingMark) { continue }
+    if ([int]$c -lt 32 -or [int]$c -gt 126 -or $c -eq ';') { continue }
+    [void]$sb.Append($c)
+}</code></pre>
+      </div>
+    </section>
+
+    <section id="protocole">
+      <h2><span class="n">07</span>Étape 6 · Le protocole série</h2>
+      <p>Toutes ces informations tiennent dans <strong>une seule ligne de texte ASCII</strong>, terminée par un retour à la ligne, à 115200 bauds. Le texte a été préféré au binaire parce qu'il se lit directement dans un moniteur série et dans le journal, ce qui simplifie le débogage.</p>
+      <div class="frame" aria-label="Trame découpée">
+        <span class="f0">Q<small>type</small></span><span class="sep">;</span>
+        <span class="f1">1792233789<small>maintenant</small></span><span class="sep">;</span>
+        <span class="f2">29<small>5 h %</small></span><span class="sep">;</span>
+        <span class="f1">1792248600<small>reset 5 h</small></span><span class="sep">;</span>
+        <span class="f3">29<small>semaine %</small></span><span class="sep">;</span>
+        <span class="f1">1792692000<small>reset sem.</small></span><span class="sep">;</span>
+        <span class="f4">0<small>services</small></span><span class="sep">;</span>
+        <span class="f1">1792233787<small>relevé</small></span><span class="sep">;</span>
+        <span class="f5">&nbsp;<small>erreur</small></span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>Champ</th><th>Exemple</th><th>Signification</th></tr></thead>
+          <tbody>
+            <tr><td>0</td><td>type</td><td><code>Q</code></td><td>« Quota ». Prévu pour d'autres types de messages à l'avenir, comme les notifications</td></tr>
+            <tr><td>1</td><td>maintenant</td><td><code>1792233789</code></td><td>Heure du PC, soit 17/10 10:43:09. La carte s'en sert pour régler son horloge</td></tr>
+            <tr><td>2</td><td>5 h %</td><td><code>29</code></td><td>Consommation de la session, <code>-1</code> si inconnue</td></tr>
+            <tr><td>3</td><td>reset 5 h</td><td><code>1792248600</code></td><td>17/10 14:50, <code>0</code> si inconnu</td></tr>
+            <tr><td>4</td><td>semaine %</td><td><code>29</code></td><td>Consommation de la semaine</td></tr>
+            <tr><td>5</td><td>reset semaine</td><td><code>1792692000</code></td><td>Jeudi 22/10 18:00</td></tr>
+            <tr><td>6</td><td>services</td><td><code>0</code></td><td>-1, 0, 1 ou 2 (voir <a href="#status">étape 4</a>)</td></tr>
+            <tr><td>7</td><td>relevé</td><td><code>1792233787</code></td><td>Heure du dernier relevé réussi, affichée en pied d'écran</td></tr>
+            <tr><td>8</td><td>erreur</td><td><em>(vide)</em></td><td>Message à afficher en orange, ASCII, 60 caractères au plus</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3>Les réponses de la carte</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>PC envoie</th><th>Carte répond</th><th>Usage</th></tr></thead>
+          <tbody>
+            <tr><td><code>Q;…</code></td><td><code>OK</code></td><td>Accusé de réception d'une trame valide</td></tr>
+            <tr><td><code>?</code></td><td><code>MINIDISPLAY claude_usage 1</code></td><td>Identification : nom du firmware et version du protocole</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout info">
+        <b>Tester à la main</b>
+        <p>Pont arrêté, on peut envoyer une trame depuis PowerShell pour essayer l'affichage avec des valeurs extrêmes :</p>
+      </div>
+      <div class="code">
+        <div class="code-head"><span class="file">Test manuel</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-powershell">$sp = New-Object System.IO.Ports.SerialPort 'COM3', 115200
+$sp.DtrEnable = $false; $sp.RtsEnable = $false; $sp.NewLine = "`n"
+$sp.Open()
+$now = [int64]((Get-Date) - [datetime]'1970-01-01').TotalSeconds
+$sp.WriteLine("Q;$now;95;$($now+1800);60;$($now+86400);2;$now;test manuel")
+Start-Sleep -Milliseconds 300; $sp.ReadExisting()   # -> OK
+$sp.Close()</code></pre>
+      </div>
+    </section>
+
+    <section id="port">
+      <h2><span class="n">08</span>Étape 7 · Trouver la carte et lui parler</h2>
+      <h3>La détection automatique</h3>
+      <p>Le numéro de port COM change selon le PC et le port USB utilisé. Plutôt que de le coder en dur, le pont cherche le périphérique par son <strong>identifiant USB</strong>. Le <strong>VID 303A</strong> est celui d'Espressif, le fabricant de l'ESP32 :</p>
+      <div class="code">
+        <div class="code-head"><span class="file">Find-BoardPort</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-powershell">function Find-BoardPort {
+    if ($Port) { return $Port }
+    # USB Serial/JTAG natif de l'ESP32-C6 : VID 303A, PID 1001, interface 00.
+    $dev = Get-CimInstance Win32_PnPEntity -Filter "PNPDeviceID LIKE 'USB\\VID_303A%'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match '\((COM\d+)\)' } | Select-Object -First 1
+    if ($dev -and $dev.Name -match '\((COM\d+)\)') { return $Matches[1] }
+    return $null
+}</code></pre>
+        <div class="code-note">La carte expose deux interfaces USB : le port série (MI_00, celui qu'on veut) et l'unité de débogage JTAG (MI_02, sans port COM). Le filtre sur « (COMx) » garde la bonne.</div>
+      </div>
+
+      <h3>Le piège DTR / RTS</h3>
+      <p>Sur l'USB natif de l'ESP32, les signaux de contrôle <strong>DTR</strong> et <strong>RTS</strong> sont détournés pour <strong>redémarrer la puce</strong>. C'est ainsi que l'outil de téléversement la réinitialise tout seul. Si le pont les activait à l'ouverture du port, chaque reconnexion redémarrerait la carte.</p>
+      <div class="code">
+        <div class="code-head"><span class="file">Open-Board</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-powershell">$sp = New-Object System.IO.Ports.SerialPort $name, 115200
+$sp.NewLine = "`n"
+$sp.WriteTimeout = 2000
+# DTR/RTS restent bas : sur l'USB Serial/JTAG, les basculer reinitialise la puce.
+$sp.DtrEnable = $false
+$sp.RtsEnable = $false
+$sp.Open()</code></pre>
+        <div class="code-note">Le débit de 115200 bauds est symbolique : sur un port USB natif (CDC), les données circulent à la vitesse de l'USB, quel que soit ce réglage.</div>
+      </div>
+
+      <h3>Débranchement et rebranchement</h3>
+      <p>Si l'écriture échoue (carte débranchée, redémarrée, port pris par le téléversement), le pont ferme le port et réessaie 5 secondes plus tard en relançant la détection. Il retrouve donc la carte tout seul, même si elle a changé de numéro de port.</p>
+    </section>
+
+    <section id="lancement">
+      <h2><span class="n">09</span>Lancement et arrêt</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Fichier</th><th>Rôle</th></tr></thead>
+          <tbody>
+            <tr><td><code>Start-MiniDisplayBridge.vbs</code></td><td>Lance PowerShell <strong>sans fenêtre</strong>. Un double-clic suffit. Sans droits administrateur.</td></tr>
+            <tr><td><code>Stop-MiniDisplayBridge.ps1</code></td><td>Cherche le processus PowerShell dont la ligne de commande contient <code>MiniDisplayBridge.ps1</code>, puis l'arrête.</td></tr>
+            <tr><td><code>MiniDisplayBridge.ps1 -Once</code></td><td>Test : un relevé, un envoi, puis arrêt. Les messages s'affichent dans la console.</td></tr>
+            <tr><td><code>MiniDisplayBridge.ps1 -Port COM5</code></td><td>Force le port si la détection automatique échoue.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout warn">
+        <b>Avant chaque téléversement</b>
+        <p>Un port COM ne peut être ouvert que par un seul programme à la fois. Tant que le pont tourne, l'outil de téléversement ne peut pas joindre la carte. Il faut d'abord l'arrêter :</p>
+      </div>
+      <div class="code">
+        <div class="code-head"><span class="file">Arrêter le pont</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-powershell">powershell -ExecutionPolicy Bypass -File bridge\Stop-MiniDisplayBridge.ps1</code></pre>
+        <div class="code-note"><code>-ExecutionPolicy Bypass</code> est nécessaire sur un Windows qui bloque les scripts par défaut. Le lanceur VBS l'utilise déjà.</div>
+      </div>
+    </section>
+
+    <section id="elevenlabs">
+      <h2><span class="n">10</span>Option · Les crédits ElevenLabs</h2>
+      <p>Le pont peut aussi afficher votre solde ElevenLabs sur une 4<sup>e</sup> vue de l'écran (appui court sur BOOT pour y accéder). C'est optionnel : sans clé, le pont fonctionne comme avant.</p>
+      <ol>
+        <li>Sur <a href="https://elevenlabs.io/app/developers/api-keys">elevenlabs.io → Developers → API Keys</a>, créez une clé. Dans les permissions, réglez <b>Utilisateur</b> sur <b>Accès</b>. Sans ce droit (<code>user_read</code>), l'API répond « missing the permission user_read ». Tout le reste peut rester sur « Pas d'accès ».</li>
+        <li>Copiez <code>bridge/secrets.env.example</code> en <code>bridge/secrets.env</code> et collez-y la clé. Ce fichier est dans le <code>.gitignore</code> : la clé ne quitte jamais votre PC.</li>
+        <li>Relancez le pont.</li>
+      </ol>
+      <div class="code">
+        <div class="code-head"><span class="file">bridge/secrets.env</span></div>
+<pre><code class="language-plaintext">ELEVENLABS_API_KEY=sk_votre_cle_ici</code></pre>
+      </div>
+      <p>Toutes les 10 minutes, le pont appelle <code>GET https://api.elevenlabs.io/v1/user/subscription</code> avec l'en-tête <code>xi-api-key</code>. Il lit les crédits consommés (<code>character_count</code>), la limite (<code>character_limit</code>) et la date de remise à zéro (<code>next_character_count_reset_unix</code>), puis envoie une seconde trame après la trame <code>Q</code> :</p>
+      <div class="code">
+        <div class="code-head"><span class="file">trame E</span></div>
+<pre><code class="language-plaintext">E;&lt;utilises&gt;;&lt;limite&gt;;&lt;reset&gt;;&lt;updated&gt;;&lt;erreur&gt;
+E;17582;37472;1793849076;1792257096;</code></pre>
+      </div>
+    </section>
+
+    <section id="journal">
+      <h2><span class="n">11</span>Le journal</h2>
+      <p>Chaque action est écrite dans <code>bridge/bridge.log</code>. Le fichier est vidé quand il dépasse 512 Ko. C'est le premier endroit où regarder :</p>
+      <div class="code">
+        <div class="code-head"><span class="file">bridge/bridge.log</span></div>
+<pre><code class="language-plaintext">2026-10-17 10:43:07  MiniDisplay Bridge demarre
+2026-10-17 10:43:08  Quota : 5 h 29 %, semaine 29 %
+2026-10-17 10:43:09  Carte connectee sur COM3
+2026-10-17 10:43:09  -> Q;1792233789;29;1792248600;29;1792692000;0;1792233787;
+2026-10-17 10:43:39  -> Q;1792233819;29;1792248600;29;1792692000;0;1792233787;</code></pre>
+      </div>
+    </section>
+
+    <section id="depannage">
+      <h2><span class="n">12</span>Dépannage</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Symptôme dans le journal</th><th>Cause</th><th>Solution</th></tr></thead>
+          <tbody>
+            <tr><td>Aucune ligne « Carte connectee »</td><td>Carte non détectée</td><td>Vérifier le câble (certains ne font que la charge), puis lancer avec <code>-Port COMx</code></td></tr>
+            <tr><td>« Ouverture de COM3 impossible : accès refusé »</td><td>Port déjà pris par un moniteur série, un autre pont ou un téléversement</td><td>Fermer l'autre programme</td></tr>
+            <tr><td>« Quota : jeton expire »</td><td>Jeton de plus d'une heure</td><td>Ouvrir Claude Code</td></tr>
+            <tr><td>« Quota : aucun jeton Claude Code »</td><td>Claude Code jamais connecté sur ce compte Windows</td><td>Se connecter une fois à Claude Code</td></tr>
+            <tr><td>« Quota : trop d'appels »</td><td>429 : le widget et le pont appellent tous les deux</td><td>Attendre ; couper le quota de l'un des deux</td></tr>
+            <tr><td>« ElevenLabs : cle refusee »</td><td>La clé n'a pas la permission Utilisateur</td><td>Régler « Utilisateur » sur « Accès » dans les permissions de la clé</td></tr>
+            <tr><td>« Quota : quota indisponible (0) »</td><td>Pas de réseau, ou proxy bloquant</td><td>Vérifier la connexion Internet</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="pager">
+      <a href="architecture.html"><small>← Précédent</small><b>Architecture</b></a>
+      <a class="next" href="firmware.html"><small>Suivant →</small><b>Le firmware</b></a>
+    </div>
+  </article>
+</div>
+
+<footer>
+  <div class="wrap">
+    <span>MDMA - MiniDisplay MiniAutomations · 2026 Q4 · Projet perso</span>
+    <span><a href="guide.html">Refaire le projet pas à pas</a></span>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/powershell.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script src="js/docs.js"></script>
+</body>
+</html>

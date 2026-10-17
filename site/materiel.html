@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="color-scheme" content="dark light">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MDMA - MiniDisplay MiniAutomations</title>
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <meta name="description" content="La carte Waveshare ESP32-C6-LCD-1.47 en détail : bus SPI partagé, GPIO, broches à éviter, USB natif, alimentation.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="docs.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap">
+    <a class="brand" href="index.html" title="MDMA : MiniDisplay MiniAutomations"><span class="brand-mark" aria-hidden="true"></span>MDMA</a>
+    <div class="nav-links">
+      <div class="nav-drop">
+        <button type="button" class="on" aria-haspopup="true">Documentation</button>
+        <div class="nav-menu">
+          <a href="architecture.html"><span>1</span>Architecture</a>
+          <a href="pont.html"><span>2</span>Le pont PC</a>
+          <a href="firmware.html"><span>3</span>Le firmware</a>
+          <a href="materiel.html" aria-current="page"><span>4</span>La carte</a>
+          <a href="guide.html"><span>5</span>Guide pas à pas</a>
+        </div>
+      </div>
+      <a href="boitiers.html">Boîtiers</a>
+      <a href="https://github.com/ilsnpn/minidisplay-miniautomations" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="doc-hero">
+  <div class="wrap">
+    <span class="kicker">Comprendre · 4 / 5</span>
+    <h1>La carte Waveshare ESP32-C6-LCD-1.47 en détail</h1>
+    <p class="lead">Ce qui est câblé à quoi, les broches qu'on peut utiliser librement, et celles qu'il vaut mieux laisser tranquilles. Pour une visite interactive, voir l'<a href="index.html#explorer" style="color:var(--accent)">explorateur 3D</a>.</p>
+    <div class="doc-meta"><span>Lecture : 10 min</span><span>Source : wiki Waveshare + datasheet ESP32-C6</span></div>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="toc">
+    <div class="cap">Sur cette page</div>
+    <a href="#resume">En bref</a>
+    <a href="#spi">Le bus SPI partagé</a>
+    <a href="#gpio">Toutes les GPIO</a>
+    <a href="#eviter">Les broches à éviter</a>
+    <a href="#usb">L'USB natif</a>
+    <a href="#alim">L'alimentation</a>
+    <a href="#plans">Plans et photos</a>
+    <a href="#liens">Documentation</a>
+  </aside>
+
+  <article class="prose">
+
+    <section id="resume">
+      <h2><span class="n">00</span>En bref</h2>
+      <div class="exploded" id="exploded">
+        <div class="ex-stage">
+          <svg class="ex-lines" aria-hidden="true"></svg>
+          <div class="ex-badge">Chargement du modèle CAO…</div>
+          <button type="button" class="ex-toggle" aria-pressed="false">Éclater</button>
+        </div>
+      </div>
+      <p class="ex-hint">Modèle CAO Waveshare · tournez-le à la souris</p>
+      <details class="ex-details">
+        <summary>Fiche technique détaillée</summary>
+      <div class="table-wrap">
+        <table>
+          <tbody>
+            <tr><td><strong>Microcontrôleur</strong></td><td>ESP32-C6FH4 : RISC-V 32 bits à 160 MHz, plus un cœur basse consommation à 20 MHz</td></tr>
+            <tr><td><strong>Mémoire</strong></td><td>512 Ko de SRAM, 16 Ko de SRAM LP, 4 Mo de Flash intégrée au boîtier, <strong>pas de PSRAM</strong></td></tr>
+            <tr><td><strong>Radio</strong></td><td>Wi-Fi 6 (2,4 GHz), Bluetooth 5 LE, IEEE 802.15.4 (Zigbee, Thread), antenne céramique</td></tr>
+            <tr><td><strong>Écran</strong></td><td>1,47″ IPS, 172 × 320, 262K couleurs, contrôleur ST7789 en SPI</td></tr>
+            <tr><td><strong>Extras</strong></td><td>LED RGB adressable, lecteur microSD, boutons BOOT et RESET</td></tr>
+            <tr><td><strong>Taille</strong></td><td>36,37 × 20,32 mm, 4 trous M2, broches au pas de 2,54 mm</td></tr>
+          </tbody>
+        </table>
+      </div>
+      </details>
+      <div class="callout info">
+        <b>L'absence de PSRAM, concrètement</b>
+        <p>Beaucoup de cartes ESP32 à écran ajoutent plusieurs Mo de PSRAM pour stocker des images. Ici, tout doit tenir dans 512 Ko. L'image complète de l'écran (108 Ko) passe, mais pas question d'en stocker dix. Voir <a href="firmware.html#rendu">le rendu hors écran</a>.</p>
+      </div>
+    </section>
+
+    <section id="spi">
+      <h2><span class="n">01</span>Le bus SPI partagé</h2>
+      <p>L'écran et le lecteur microSD sont branchés sur le <strong>même bus SPI</strong>. Ils partagent les fils de données et d'horloge. Chacun a sa propre ligne <strong>CS</strong> (Chip Select) : le microcontrôleur abaisse le CS de celui à qui il parle, et l'autre ignore le trafic.</p>
+      <figure class="diagram">
+        <svg viewBox="0 0 900 330" role="img" aria-label="Bus SPI : MOSI et SCLK partagés entre l'écran et la carte TF">
+          <rect x="20" y="30" width="180" height="290" rx="12" class="d-box"/>
+          <text x="36" y="60" class="d-title">ESP32-C6</text>
+
+          <rect x="640" y="30" width="240" height="160" rx="12" class="d-acc"/>
+          <text x="656" y="60" class="d-title">Écran ST7789</text>
+          <text x="656" y="84" class="d-text">ne fait que recevoir :</text>
+          <text x="656" y="102" class="d-text">pas de ligne retour (MISO)</text>
+
+          <rect x="640" y="210" width="240" height="110" rx="12" class="d-box"/>
+          <text x="656" y="240" class="d-title">Lecteur microSD</text>
+          <text x="656" y="262" class="d-text">reçoit et répond (MISO)</text>
+
+          <!-- lignes partagées -->
+          <path d="M200 90 L640 90" class="d-line-acc"/>
+          <path d="M200 115 L640 115" class="d-line-acc"/>
+          <path d="M520 90 L520 250 L640 250" class="d-line-acc"/>
+          <path d="M545 115 L545 272 L640 272" class="d-line-acc"/>
+          <circle cx="520" cy="90" r="4" fill="var(--accent)"/>
+          <circle cx="545" cy="115" r="4" fill="var(--accent)"/>
+          <text x="214" y="84" class="d-mono-acc">GPIO6 · MOSI (données →)</text>
+          <text x="214" y="109" class="d-mono-acc">GPIO7 · SCLK (horloge)</text>
+
+          <!-- lignes écran -->
+          <path d="M200 140 L640 140" class="d-line"/>
+          <path d="M200 158 L640 158" class="d-line"/>
+          <path d="M200 176 L640 176" class="d-line"/>
+          <path d="M200 194 L600 194 L600 182 L640 182" class="d-line"/>
+          <text x="214" y="136" class="d-mono">GPIO14 · CS écran</text>
+          <text x="214" y="154" class="d-mono">GPIO15 · DC (commande/donnée)</text>
+          <text x="214" y="172" class="d-mono">GPIO21 · RST</text>
+          <text x="214" y="208" class="d-mono">GPIO22 · rétroéclairage (PWM)</text>
+
+          <!-- lignes SD -->
+          <path d="M640 294 L200 294" class="d-line"/>
+          <path d="M200 312 L640 312" class="d-line"/>
+          <text x="214" y="288" class="d-mono">GPIO5 · MISO (← données SD)</text>
+          <text x="214" y="328" class="d-mono">GPIO4 · CS carte SD</text>
+        </svg>
+        <figcaption>En orange, les lignes partagées. GPIO4 et GPIO5 sont aussi sortis sur le connecteur.</figcaption>
+      </figure>
+      <ul>
+        <li><strong>MOSI</strong> (Master Out, Slave In) : les données du microcontrôleur vers le périphérique.</li>
+        <li><strong>MISO</strong> (Master In, Slave Out) : le chemin retour. L'écran ne renvoie rien, seule la carte SD l'utilise.</li>
+        <li><strong>SCLK</strong> : l'horloge qui cadence chaque bit, à 40 MHz pour l'écran.</li>
+        <li><strong>DC</strong>, propre à l'écran : indique si l'octet envoyé est une commande (« place-toi en x, y ») ou une donnée (la couleur d'un pixel).</li>
+      </ul>
+    </section>
+
+    <section id="gpio">
+      <h2><span class="n">02</span>Toutes les GPIO</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>GPIO</th><th>Rôle sur la carte</th><th>Connecteur</th><th>Pour vos projets</th></tr></thead>
+          <tbody>
+            <tr><td><code>0</code> – <code>3</code></td><td>libres · ADC · basse consommation</td><td>oui</td><td><span style="color:var(--green)">●</span> Libres. Seules entrées analogiques disponibles avec 4 et 5</td></tr>
+            <tr><td><code>4</code></td><td>CS de la carte SD · strapping</td><td>oui</td><td><span style="color:var(--amber)">●</span> Seulement sans carte SD</td></tr>
+            <tr><td><code>5</code></td><td>MISO de la carte SD · strapping</td><td>oui</td><td><span style="color:var(--amber)">●</span> Seulement sans carte SD</td></tr>
+            <tr><td><code>6</code>, <code>7</code></td><td>MOSI et SCLK (écran + SD)</td><td>non</td><td><span style="color:var(--red)">●</span> Occupées</td></tr>
+            <tr><td><code>8</code></td><td>LED RGB · strapping</td><td>non</td><td><span style="color:var(--red)">●</span> Occupée</td></tr>
+            <tr><td><code>9</code></td><td>Bouton BOOT · strapping</td><td>oui</td><td><span style="color:var(--amber)">●</span> Comme bouton, oui. Ne rien y brancher qui la tire vers le bas au démarrage</td></tr>
+            <tr><td><code>12</code>, <code>13</code></td><td>USB D− / D+</td><td>oui</td><td><span style="color:#ff5d8f">●</span> À ne pas toucher : elles portent l'USB</td></tr>
+            <tr><td><code>14</code>, <code>15</code>, <code>21</code>, <code>22</code></td><td>CS, DC, RST et rétroéclairage de l'écran</td><td>non</td><td><span style="color:var(--red)">●</span> Occupées</td></tr>
+            <tr><td><code>16</code>, <code>17</code></td><td>TXD / RXD de l'UART0</td><td>oui</td><td><span style="color:var(--violet)">●</span> Libres en pratique : la console passe par l'USB</td></tr>
+            <tr><td><code>18</code>, <code>19</code>, <code>20</code>, <code>23</code></td><td>libres</td><td>oui</td><td><span style="color:var(--green)">●</span> Libres (numérique : I2C, PWM, UART…)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Toutes les fonctions numériques (I2C, PWM, UART, I2S) passent par la <strong>matrice GPIO</strong> de l'ESP32-C6. Elles peuvent donc être placées sur presque n'importe quelle broche libre. L'ADC, en revanche, n'existe que sur GPIO0 à 6.</p>
+    </section>
+
+    <section id="eviter">
+      <h2><span class="n">03</span>Les broches à éviter</h2>
+      <h3>Les broches de strapping : 4, 5, 8, 9, 15</h3>
+      <p>Au démarrage, la puce <strong>lit l'état</strong> de ces broches pour choisir son mode : démarrage normal ou mode téléchargement, réglages internes. Un capteur qui les force à une mauvaise valeur au moment du reset peut empêcher la carte de démarrer.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>GPIO9 (BOOT) au reset</th><th>Résultat</th></tr></thead>
+          <tbody>
+            <tr><td>Haut : bouton relâché, état par défaut</td><td>Démarrage normal du programme</td></tr>
+            <tr><td>Bas : bouton maintenu</td><td>Mode téléchargement : la puce attend un nouveau firmware</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3>L'USB : 12 et 13</h3>
+      <p>Sur cette carte, GPIO12 et GPIO13 sont reliés directement au connecteur USB-C. Les configurer comme sorties dans un programme <strong>coupe l'USB</strong> : plus de console, plus de pont, plus de téléversement normal. Seul le mode téléchargement (BOOT + RESET) permet alors de reflasher.</p>
+    </section>
+
+    <section id="usb">
+      <h2><span class="n">04</span>L'USB natif</h2>
+      <p>La plupart des cartes ESP32 ont une puce USB-série séparée (CH340, CP2102). Ce n'est pas le cas ici : l'ESP32-C6 a un <strong>contrôleur USB Serial/JTAG intégré</strong>, câblé directement sur le connecteur.</p>
+      <ul>
+        <li><strong>Avantage :</strong> pas de pilote à installer sous Windows 10 et 11. La carte apparaît comme « Périphérique série USB (COMx) » avec le VID <code>303A</code> (Espressif) et le PID <code>1001</code>.</li>
+        <li><strong>Avantage :</strong> le débogage JTAG est possible par le même câble.</li>
+        <li><strong>Inconvénient :</strong> si le programme plante dès le démarrage ou désactive l'USB, le port COM disparaît. Il faut alors forcer le mode téléchargement à la main.</li>
+      </ul>
+      <div class="callout key">
+        <b>Forcer le mode téléchargement</b>
+        <p>1. Maintenir <strong>BOOT</strong>. 2. Appuyer puis relâcher <strong>RESET</strong>. 3. Relâcher <strong>BOOT</strong>. La carte attend alors un firmware, quoi qu'il y ait en Flash. Après le téléversement, appuyer sur RESET.</p>
+      </div>
+      <p>Côté Arduino, l'option <code>CDCOnBoot=cdc</code> branche l'objet <code>Serial</code> sur cet USB natif. Sans elle, <code>Serial</code> enverrait ses données sur les broches TXD et RXD, et le pont n'entendrait rien.</p>
+    </section>
+
+    <section id="alim">
+      <h2><span class="n">05</span>L'alimentation</h2>
+      <figure class="diagram">
+<pre class="mermaid">
+flowchart LR
+    U["USB-C<br/>5 V"] --> V["Broche 5V<br/>du connecteur"]
+    U --> L["LDO ME6217C33<br/>800 mA max"]
+    L --> T["3,3 V"]
+    T --> E[ESP32-C6]
+    T --> D["Écran + rétroéclairage"]
+    T --> S[Carte microSD]
+    T --> R[LED RGB]
+    T --> P["Broche 3V3<br/>du connecteur"]
+</pre>
+        <figcaption>Un seul régulateur fournit le 3,3 V à toute la carte et aux modules externes.</figcaption>
+      </figure>
+      <p>Le régulateur ME6217 est un <strong>LDO</strong> (Low Drop-Out) : il abaisse le 5 V en 3,3 V en dissipant la différence sous forme de chaleur. Ses 800 mA sont partagés entre tout ce qui est branché sur le 3,3 V. Les pics de consommation du Wi-Fi peuvent dépasser 300 mA : il faut garder de la marge avant d'alimenter des modules externes sur la broche 3V3.</p>
+    </section>
+
+    <section id="plans">
+      <h2><span class="n">06</span>Plans et photos</h2>
+      <figure class="diagram" style="background:#f4f5f7;padding:8px">
+        <img src="assets/04-brochage-pinout.png" alt="Brochage du connecteur" loading="lazy">
+        <figcaption style="color:#555">Brochage du connecteur, face composants (document Waveshare)</figcaption>
+      </figure>
+      <figure class="diagram" style="background:#f4f5f7;padding:8px">
+        <img src="assets/05-composants-reperes.png" alt="Composants repérés" loading="lazy">
+        <figcaption style="color:#555">1 ESP32-C6FH4 · 2 régulateur ME6217 · 3 carte TF · 4 antenne · 5 BOOT · 6 RESET</figcaption>
+      </figure>
+      <figure class="diagram" style="background:#f4f5f7;padding:8px">
+        <img src="assets/06-dimensions-mecaniques.png" alt="Dimensions mécaniques en millimètres" loading="lazy">
+        <figcaption style="color:#555">Dimensions mécaniques en millimètres</figcaption>
+      </figure>
+    </section>
+
+    <section id="liens">
+      <h2><span class="n">07</span>Documentation</h2>
+      <ul>
+        <li><a href="https://www.waveshare.com/wiki/ESP32-C6-LCD-1.47" target="_blank" rel="noopener">Wiki Waveshare ESP32-C6-LCD-1.47</a> : schéma, démos, modèle 3D</li>
+        <li><a href="https://www.espressif.com/sites/default/files/documentation/esp32-c6_datasheet_en.pdf" target="_blank" rel="noopener">Datasheet ESP32-C6</a> (Espressif)</li>
+        <li><a href="https://www.espressif.com/sites/default/files/documentation/esp32-c6_technical_reference_manual_en.pdf" target="_blank" rel="noopener">Manuel de référence technique ESP32-C6</a> (Espressif)</li>
+        <li>Dans le dépôt : <code>docs/HARDWARE.md</code>, la fiche matériel complète</li>
+      </ul>
+    </section>
+
+    <div class="pager">
+      <a href="firmware.html"><small>← Précédent</small><b>Le firmware</b></a>
+      <a class="next" href="guide.html"><small>Suivant →</small><b>Refaire le projet pas à pas</b></a>
+    </div>
+  </article>
+</div>
+
+<footer>
+  <div class="wrap">
+    <span>MDMA - MiniDisplay MiniAutomations · 2026 Q4 · Projet perso</span>
+    <span><a href="index.html#explorer">Explorer la carte en 3D</a></span>
+  </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script src="js/docs.js"></script>
+<script type="module" src="js/exploded.js"></script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+# Widget PC d'origine : projet séparé, contient des chemins personnels (diagnostic.txt)
+ClaudeStatus/
+ClaudeStatus.zip
+
+# Journal d'exécution du pont
+bridge/bridge.log
+
+# Divers
+.vscode/
+*.tmp
+
+# Secrets locaux (clés API) — ne jamais committer
+bridge/secrets.env
+*.env
+!bridge/secrets.env.example
+
+# Notes privées : roadmap et photos personnelles (non publiées)
+ROADMAP.md
+Retour visuel/

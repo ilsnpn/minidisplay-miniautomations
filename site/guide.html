@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="color-scheme" content="dark light">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MDMA - MiniDisplay MiniAutomations</title>
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <meta name="description" content="Refaire MDMA depuis un PC Windows vierge : installation, compilation, téléversement, lancement du pont.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+  <link rel="stylesheet" href="style.css">
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="docs.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap">
+    <a class="brand" href="index.html" title="MDMA : MiniDisplay MiniAutomations"><span class="brand-mark" aria-hidden="true"></span>MDMA</a>
+    <div class="nav-links">
+      <div class="nav-drop">
+        <button type="button" class="on" aria-haspopup="true">Documentation</button>
+        <div class="nav-menu">
+          <a href="architecture.html"><span>1</span>Architecture</a>
+          <a href="pont.html"><span>2</span>Le pont PC</a>
+          <a href="firmware.html"><span>3</span>Le firmware</a>
+          <a href="materiel.html"><span>4</span>La carte</a>
+          <a href="guide.html" aria-current="page"><span>5</span>Guide pas à pas</a>
+        </div>
+      </div>
+      <a href="boitiers.html">Boîtiers</a>
+      <a href="https://github.com/ilsnpn/minidisplay-miniautomations" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="doc-hero">
+  <div class="wrap">
+    <span class="kicker">Pratiquer · 5 / 5</span>
+    <h1>Refaire le projet pas à pas</h1>
+    <p class="lead">D'un PC Windows sans aucun outil jusqu'à l'écran qui affiche votre quota. Toutes les commandes se tapent dans PowerShell, depuis le dossier du projet.</p>
+    <div class="doc-meta"><span>Durée : 30 à 45 min</span><span>Windows 10 / 11</span><span>Aucun droit administrateur</span></div>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="toc">
+    <div class="cap">Sur cette page</div>
+    <a href="#prerequis">Prérequis</a>
+    <a href="#etapes">Les étapes</a>
+    <a href="#autostart">Démarrage automatique</a>
+    <a href="#mise-a-jour">Modifier le firmware</a>
+    <a href="#aide">En cas de souci</a>
+  </aside>
+
+  <article class="prose">
+
+    <section id="prerequis">
+      <h2><span class="n">00</span>Prérequis</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Élément</th><th>Remarque</th></tr></thead>
+          <tbody>
+            <tr><td>Carte Waveshare <strong>ESP32-C6-LCD-1.47</strong></td><td>Environ 15 € chez les revendeurs habituels</td></tr>
+            <tr><td>Câble <strong>USB-C de données</strong></td><td>Certains câbles ne font que la charge : la carte s'allume mais aucun port COM n'apparaît</td></tr>
+            <tr><td>PC Windows 10 ou 11</td><td>PowerShell 5.1 est déjà installé</td></tr>
+            <tr><td><strong>Claude Code</strong> installé et connecté</td><td>C'est lui qui fournit le jeton d'accès au quota</td></tr>
+            <tr><td>Le dossier du projet (dépôt <code>minidisplay-miniautomations</code>)</td><td>Avec <code>bridge/</code> et <code>firmware/</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="etapes">
+      <h2><span class="n">01</span>Les étapes</h2>
+      <div class="steps">
+
+        <div class="step">
+          <h3>Installer arduino-cli</h3>
+          <p>L'outil en ligne de commande d'Arduino : un seul exécutable, installé dans le dossier utilisateur.</p>
+          <div class="code">
+            <div class="code-head"><span class="file">PowerShell</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-powershell">$dir = "$env:LOCALAPPDATA\arduino-cli"
+New-Item -ItemType Directory -Force $dir | Out-Null
+Invoke-WebRequest https://downloads.arduino.cc/arduino-cli/arduino-cli_latest_Windows_64bit.zip -OutFile "$dir\cli.zip"
+Expand-Archive "$dir\cli.zip" $dir -Force
+Remove-Item "$dir\cli.zip"
+&amp; "$dir\arduino-cli.exe" version</code></pre>
+            <div class="code-note">Attendu : <code>arduino-cli Version: 1.x.x</code></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <h3>Installer le support ESP32 et les bibliothèques</h3>
+          <p>On déclare le dépôt d'Espressif, puis on installe le « core » ESP32 (environ 1 Go, compter quelques minutes) et les trois bibliothèques Adafruit.</p>
+          <div class="code">
+            <div class="code-head"><span class="file">PowerShell</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-powershell">$A = "$env:LOCALAPPDATA\arduino-cli\arduino-cli.exe"
+&amp; $A config init
+&amp; $A config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+&amp; $A core update-index
+&amp; $A core install esp32:esp32
+&amp; $A lib install "Adafruit ST7735 and ST7789 Library" "Adafruit NeoPixel"</code></pre>
+            <div class="code-note">La bibliothèque Adafruit GFX est installée automatiquement, comme dépendance du pilote ST7789. Version utilisée pour ce projet : <code>esp32:esp32</code> 3.3.12.</div>
+          </div>
+        </div>
+
+        <div class="step">
+          <h3>Brancher la carte et trouver son port</h3>
+          <div class="code">
+            <div class="code-head"><span class="file">PowerShell</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-powershell">Get-PnpDevice -PresentOnly | Where-Object InstanceId -like 'USB\VID_303A*' | Select-Object FriendlyName</code></pre>
+            <div class="code-note">Attendu : <code>Périphérique série USB (COM3)</code> et <code>USB JTAG/serial debug unit</code>. Notez le numéro du port COM. Les exemples suivants utilisent COM3.</div>
+          </div>
+          <div class="callout warn">
+            <b>Rien n'apparaît ?</b>
+            <p>Essayez un autre câble. Sinon, forcez le mode téléchargement : maintenir BOOT, appuyer sur RESET, relâcher BOOT.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <h3>Premier test : Hello World</h3>
+          <p>Avant le vrai projet, on vérifie que la chaîne complète fonctionne : compilation, téléversement et affichage.</p>
+          <div class="code">
+            <div class="code-head"><span class="file">PowerShell, depuis le dossier du projet</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-powershell">$F = "esp32:esp32:esp32c6:CDCOnBoot=cdc"
+&amp; $A compile --fqbn $F firmware\hello_world
+&amp; $A upload  --fqbn $F -p COM3 firmware\hello_world</code></pre>
+          </div>
+          <div class="callout ok">
+            <b>Résultat attendu</b>
+            <p>« Hello World » en blanc, « MiniDisplay C6 » en jaune, un cadre cyan sur les quatre bords, et la LED qui passe par toutes les couleurs. Si le cadre est coupé d'un côté, le décalage de l'écran est faux.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <h3>Téléverser le firmware du projet</h3>
+          <div class="code">
+            <div class="code-head"><span class="file">PowerShell</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-powershell">&amp; $A compile --fqbn $F firmware\claude_usage
+&amp; $A upload  --fqbn $F -p COM3 firmware\claude_usage</code></pre>
+            <div class="code-note">L'écran affiche « Claude usage », des jauges vides et, en bas, « En attente du PC (lancez le pont USB)... ». C'est normal : la carte attend ses données.</div>
+          </div>
+        </div>
+
+        <div class="step">
+          <h3>Tester le pont une fois</h3>
+          <p>Le paramètre <code>-Once</code> fait un seul relevé, un seul envoi, et affiche tout dans la console :</p>
+          <div class="code">
+            <div class="code-head"><span class="file">PowerShell</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-powershell">powershell -ExecutionPolicy Bypass -File bridge\MiniDisplayBridge.ps1 -Once</code></pre>
+          </div>
+          <div class="code">
+            <div class="code-head"><span class="file">Sortie attendue</span></div>
+<pre><code class="language-plaintext">2026-10-17 10:31:08  MiniDisplay Bridge demarre
+2026-10-17 10:31:08  Quota : 5 h 27 %, semaine 29 %
+2026-10-17 10:31:09  Carte connectee sur COM3
+2026-10-17 10:31:09  -> Q;1792233069;27;1792248600;29;1792692000;0;1792233068;</code></pre>
+            <div class="code-note">L'écran se remplit aussitôt. Il repassera en « PC deconnecte » au bout de 2 minutes, puisque le test s'arrête après un envoi.</div>
+          </div>
+        </div>
+
+        <div class="step">
+          <h3>Lancer le pont pour de bon</h3>
+          <p>Double-cliquez sur <code>bridge\Start-MiniDisplayBridge.vbs</code>. Aucune fenêtre ne s'ouvre : le pont tourne en arrière-plan. Pour vérifier qu'il travaille, ouvrez <code>bridge\bridge.log</code> : une ligne « -> Q;… » s'ajoute toutes les 30 secondes.</p>
+        </div>
+
+      </div>
+    </section>
+
+    <section id="autostart">
+      <h2><span class="n">02</span>Démarrage automatique avec Windows</h2>
+      <p>Pour que le pont démarre à chaque ouverture de session :</p>
+      <ol>
+        <li>Appuyez sur <strong>Win + R</strong>, tapez <code>shell:startup</code> puis Entrée. Le dossier Démarrage s'ouvre.</li>
+        <li>Faites un clic droit sur <code>Start-MiniDisplayBridge.vbs</code>, puis <strong>Afficher d'autres options → Créer un raccourci</strong>.</li>
+        <li>Déplacez ce raccourci dans le dossier Démarrage.</li>
+      </ol>
+    </section>
+
+    <section id="mise-a-jour">
+      <h2><span class="n">03</span>Modifier le firmware</h2>
+      <p>Le cycle de travail, à chaque modification de <code>claude_usage.ino</code> :</p>
+      <div class="code">
+        <div class="code-head"><span class="file">PowerShell</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-powershell">powershell -ExecutionPolicy Bypass -File bridge\Stop-MiniDisplayBridge.ps1   # 1. libérer le port
+&amp; $A compile --fqbn $F firmware\claude_usage                                 # 2. compiler
+&amp; $A upload  --fqbn $F -p COM3 firmware\claude_usage                         # 3. téléverser
+Start-Process bridge\Start-MiniDisplayBridge.vbs                               # 4. relancer le pont</code></pre>
+        <div class="code-note">Oublier l'étape 1 donne une erreur de téléversement « port busy » ou « access denied » : le pont occupe le port.</div>
+      </div>
+    </section>
+
+    <section id="aide">
+      <h2><span class="n">04</span>En cas de souci</h2>
+      <ul>
+        <li>Lire le pied de l'écran : il indique presque toujours la cause. Voir <a href="architecture.html#pannes">Quand quelque chose casse</a>.</li>
+        <li>Lire <code>bridge\bridge.log</code>. Voir <a href="pont.html#depannage">le dépannage du pont</a>.</li>
+        <li>Problème de carte ou de port : voir <a href="materiel.html#usb">l'USB natif</a>.</li>
+      </ul>
+    </section>
+
+    <div class="pager">
+      <a href="materiel.html"><small>← Précédent</small><b>La carte en détail</b></a>
+      <a class="next" href="boitiers.html"><small>Suivant →</small><b>Boîtiers et achat</b></a>
+    </div>
+  </article>
+</div>
+
+<footer>
+  <div class="wrap">
+    <span>MDMA - MiniDisplay MiniAutomations · 2026 Q4 · Projet perso</span>
+    <span><a href="architecture.html">Comprendre l'architecture</a></span>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/powershell.min.js"></script>
+<script src="js/docs.js"></script>
+</body>
+</html>

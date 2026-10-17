@@ -1,0 +1,899 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="color-scheme" content="dark light">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MDMA - MiniDisplay MiniAutomations</title>
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <meta name="description" content="MDMA : mini-écran USB open source sur ESP32-C6. Le PC envoie, l'écran affiche : quota Claude, crédits ElevenLabs, horloge, 7 thèmes.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="js/theme.js"></script>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap">
+    <a class="brand" href="#top" title="MDMA : MiniDisplay MiniAutomations"><span class="brand-mark" aria-hidden="true"></span>MDMA</a>
+    <div class="nav-links">
+      <div class="nav-drop">
+        <button type="button" aria-haspopup="true">Documentation</button>
+        <div class="nav-menu">
+          <a href="architecture.html"><span>1</span>Architecture</a>
+          <a href="pont.html"><span>2</span>Le pont PC</a>
+          <a href="firmware.html"><span>3</span>Le firmware</a>
+          <a href="materiel.html"><span>4</span>La carte</a>
+          <a href="guide.html"><span>5</span>Guide pas à pas</a>
+        </div>
+      </div>
+      <a href="boitiers.html">Boîtiers</a>
+      <a href="https://github.com/ilsnpn/minidisplay-miniautomations" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap">
+    <div>
+      <p class="mdma" id="mdma" aria-label="MDMA : MiniDisplay MiniAutomations">
+        <span class="w" aria-hidden="true"><b>M</b><span class="r">ini</span><b>D</b><span class="r">isplay</span></span>
+        <span class="w" aria-hidden="true"><b>M</b><span class="r">ini</span><b>A</b><span class="r">utomations</span></span>
+      </p>
+      <span class="eyebrow">Open source · ESP32-C6 · USB-C</span>
+      <h1>Un mini-écran USB <em>pour vos automatisations.</em></h1>
+      <p class="lead">Le PC envoie, l'écran affiche. Quota Claude, crédits ElevenLabs, ou tout ce qu'un script sait relever. Sans Wi-Fi, un seul câble.</p>
+      <ul class="uses">
+        <li>Quota Claude</li><li>Crédits ElevenLabs</li><li>Horloge</li><li>7 thèmes</li><li>Vos données</li>
+      </ul>
+      <p class="oss"><b>Open source.</b> Firmware, pont PC, modèle 3D et ce site seront publiés sur GitHub pour le reproduire.</p>
+      <div class="stats">
+        <div class="stat"><b>172 × 320</b><span>pixels IPS</span></div>
+        <div class="stat"><b>36 × 20 mm</b><span>la carte entière</span></div>
+        <div class="stat"><b>0</b><span>connexion Wi-Fi</span></div>
+      </div>
+    </div>
+    <div class="hero-media">
+      <video id="hero-video" src="assets/mdma.mp4" poster="assets/mdma-poster.jpg" width="1920" height="1080" autoplay muted loop playsinline aria-label="Présentation animée de MDMA"></video>
+      <span class="sound" id="hero-sound" aria-hidden="true">Survolez pour le son</span>
+    </div>
+  </div>
+</header>
+
+<section id="explorer">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">Explorateur 3D</span>
+      <h2>Faites le tour de la carte</h2>
+      <p>Tournez, zoomez, cliquez sur une broche ou un composant.</p>
+    </div>
+
+    <div class="explorer">
+      <div class="stage" id="stage">
+        <div class="stage-loading" id="stage-loading">Chargement de la scène 3D…</div>
+        <div class="stage-toolbar">
+          <button class="chip-btn" data-view="top" aria-pressed="true">Face écran</button>
+          <button class="chip-btn" data-view="bottom" aria-pressed="false">Face composants</button>
+          <button class="chip-btn" id="btn-labels" aria-pressed="true">Étiquettes</button>
+          <button class="chip-btn" id="btn-rotate" aria-pressed="false">Rotation</button>
+        </div>
+        <div class="tooltip" id="tooltip"></div>
+        <div class="stage-hint">Glisser pour tourner · molette pour zoomer · clic pour inspecter</div>
+        <div class="model-badge" id="model-badge">Chargement du modèle CAO…</div>
+      </div>
+
+      <aside class="panel" id="panel" aria-live="polite"></aside>
+
+      <div class="header-map">
+        <div class="cap">Rangée côté BOOT</div>
+        <div class="pin-row" id="row-a"></div>
+        <div class="pin-row" id="row-b"></div>
+        <div class="cap">Rangée côté RESET · vue face composants, USB-C à droite</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="projet">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">Le projet</span>
+      <h2>Du serveur de Claude à votre bureau</h2>
+      <p>Pas de Wi-Fi : le PC interroge Claude et envoie les chiffres par USB. <a href="architecture.html" style="color:var(--accent)">Architecture →</a></p>
+    </div>
+
+    <div class="flow">
+      <div class="flow-step">
+        <span class="num">01 · API</span>
+        <h3>Claude</h3>
+        <p>Quota consommé et heure de reset, plus l'état de <code>status.claude.com</code>.</p>
+      </div>
+      <div class="flow-arrow"><div><span>→</span>HTTPS</div></div>
+      <div class="flow-step">
+        <span class="num">02 · PC</span>
+        <h3>Le pont</h3>
+        <p>Script PowerShell, jeton de Claude Code, un appel toutes les 5 min.</p>
+      </div>
+      <div class="flow-arrow"><div><span>→</span>USB série</div></div>
+      <div class="flow-step">
+        <span class="num">03 · ESP32-C6</span>
+        <h3>L'écran</h3>
+        <p>Une ligne <code>Q;…</code> toutes les 30 s, l'écran se redessine.</p>
+      </div>
+    </div>
+
+    <div class="screen-explain">
+      <div class="screen-mock"><canvas id="screen-mock" width="640" height="344" aria-label="Reproduction de l'écran MDMA"></canvas></div>
+      <div class="explain-list">
+        <div class="explain-item">
+          <span class="ico">%</span>
+          <div><h4>Deux jauges</h4><p>Session 5 h en haut, semaine en bas, en % consommé.</p></div>
+        </div>
+        <div class="explain-item">
+          <span class="ico">|</span>
+          <div><h4>Le repère de temps</h4><p>Le trait blanc marque le rythme régulier. Barre avant le trait : de la marge.</p></div>
+        </div>
+        <div class="explain-item">
+          <span class="ico">●</span>
+          <div>
+            <h4>Les couleurs</h4>
+            <p>La jauge change de teinte selon l'écart au rythme. La LED suit la session.</p>
+            <div class="swatches">
+              <span class="swatch" style="background:#b1ada1">marge</span>
+              <span class="swatch" style="background:#d97757">dans le rythme</span>
+              <span class="swatch" style="background:#e5484d;color:#fff">trop vite</span>
+            </div>
+          </div>
+        </div>
+        <div class="explain-item">
+          <span class="ico">⏱</span>
+          <div><h4>Les remises à zéro</h4><p>Heure du reset sous chaque barre. Pastille : état des services Claude.</p></div>
+        </div>
+        <div class="explain-item">
+          <span class="ico">B</span>
+          <div><h4>Le bouton BOOT</h4><p>Appui court : vue suivante. Appui long : thème suivant. Réglages mémorisés.</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="themes">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">Thèmes</span>
+      <h2>Retrouvez différents thèmes</h2>
+      <p>Appui long sur BOOT pour changer. Rendus pixel par pixel par le vrai firmware.</p>
+    </div>
+    <div class="theme-tabs" role="group" aria-label="Vue affichée sur tous les thèmes"><button type="button" data-view="jauges" aria-pressed="true" class="on">Jauges</button><button type="button" data-view="chiffres" aria-pressed="false">Chiffres</button><button type="button" data-view="horloge" aria-pressed="false">Horloge</button><button type="button" data-view="elevenlabs" aria-pressed="false">ElevenLabs</button><button type="button" data-view="pc" aria-pressed="false">PC</button><button type="button" data-view="pomodoro" aria-pressed="false">Pomodoro</button><button type="button" data-view="palais-siam" aria-pressed="false">PALais SIAM</button></div>
+    <div class="theme-grid">
+        <figure class="theme-card">
+          <figcaption>Claude Code</figcaption>
+          <div class="theme-screen"><img src="assets/themes/claude-jauges.png" width="640" height="344" alt="Écran MDMA, thème Claude Code" loading="lazy"></div>
+        </figure>
+        <figure class="theme-card">
+          <figcaption>Matrix</figcaption>
+          <div class="theme-screen"><img src="assets/themes/matrix-jauges.png" width="640" height="344" alt="Écran MDMA, thème Matrix" loading="lazy"></div>
+        </figure>
+        <figure class="theme-card">
+          <figcaption>MS-DOS</figcaption>
+          <div class="theme-screen"><img src="assets/themes/msdos-jauges.png" width="640" height="344" alt="Écran MDMA, thème MS-DOS" loading="lazy"></div>
+        </figure>
+        <figure class="theme-card">
+          <figcaption>Windows 98</figcaption>
+          <div class="theme-screen"><img src="assets/themes/win98-jauges.png" width="640" height="344" alt="Écran MDMA, thème Windows 98" loading="lazy"></div>
+        </figure>
+        <figure class="theme-card">
+          <figcaption>Ubuntu</figcaption>
+          <div class="theme-screen"><img src="assets/themes/ubuntu-jauges.png" width="640" height="344" alt="Écran MDMA, thème Ubuntu" loading="lazy"></div>
+        </figure>
+        <figure class="theme-card">
+          <figcaption>macOS</figcaption>
+          <div class="theme-screen"><img src="assets/themes/macos-jauges.png" width="640" height="344" alt="Écran MDMA, thème macOS" loading="lazy"></div>
+        </figure>
+        <figure class="theme-card">
+          <figcaption>Aperture Science</figcaption>
+          <div class="theme-screen"><img src="assets/themes/aperture-jauges.png" width="640" height="344" alt="Écran MDMA, thème Aperture Science" loading="lazy"></div>
+        </figure>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>MDMA - MiniDisplay MiniAutomations · 2026 Q4 · Projet perso</span>
+    <span>Carte : <a href="https://www.waveshare.com/wiki/ESP32-C6-LCD-1.47" target="_blank" rel="noopener">wiki Waveshare ESP32-C6-LCD-1.47</a></span>
+  </div>
+</footer>
+
+<script src="js/data.js"></script>
+<script src="js/screen.js"></script>
+<script>
+// Vidéo d'accueil : toujours lancée, muette ; le son ne joue que tant que la souris est dessus.
+// Les navigateurs n'autorisent le son qu'après un premier clic sur la page : sinon, le
+// survol invite à cliquer, et le clic active le son.
+(() => {
+  const v = document.getElementById('hero-video'), box = v.parentElement, hint = document.getElementById('hero-sound');
+  const allowed = () => !navigator.userActivation || navigator.userActivation.hasBeenActive;
+  const on = () => { if (!allowed()) { hint.textContent = 'Cliquez pour le son'; return; } v.muted = false; v.play().catch(() => { v.muted = true; }); hint.textContent = 'Son activé'; box.classList.add('loud'); };
+  const off = () => { v.muted = true; hint.textContent = 'Survolez pour le son'; box.classList.remove('loud'); };
+  box.addEventListener('mouseenter', on);
+  box.addEventListener('mouseleave', off);
+  box.addEventListener('click', on);
+})();
+</script>
+<script>
+// Thèmes : la bande d'onglets change la vue de toutes les vignettes à la fois
+document.querySelectorAll('#themes .theme-tabs button').forEach((b, _, all) => b.addEventListener('click', () => {
+  document.querySelectorAll('#themes .theme-screen img').forEach((img) => {
+    img.src = img.src.replace(/-[a-z-]+\.png$/, '-' + b.dataset.view + '.png');
+  });
+  all.forEach((x) => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); });
+}));
+</script>
+<script>
+  // Nom du projet : les initiales seules, puis les mots se déplient (une fois)
+  (function () {
+    const el = document.getElementById('mdma');
+    const rest = el.querySelectorAll('.r');
+    const open = () => {
+      rest.forEach((r) => { r.style.maxWidth = r.scrollWidth + 'px'; });
+      el.classList.add('open');
+      // Une fois déplié, plus de limite de largeur (redimensionnement, zoom)
+      setTimeout(() => rest.forEach((r) => { r.style.maxWidth = 'none'; }), 1300);
+    };
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) open();
+    else setTimeout(open, 900);
+  })();
+
+  // Maquette 2D de l'écran (section « Le projet »)
+  (function () {
+    const cv = document.getElementById('screen-mock');
+    const ctx = cv.getContext('2d');
+    const draw = () => window.drawMiniScreen(ctx, cv.width / window.MINI_SCREEN.W, new Date());
+    draw();
+    setInterval(draw, 1000);
+  })();
+
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+// Toutes les cotes sont en millimètres (docs/images/06-dimensions-mecaniques.png).
+// Repère : X = longueur (USB-C vers +X), Z = largeur, Y = épaisseur (écran vers +Y).
+const D = window.BOARD_DATA;
+const BW = 36.37, BD = 20.32, BT = 0.8;   // épaisseur mesurée sur le modèle CAO
+const PITCH = 2.54, ROW_Z = 17.78 / 2;
+const PIN0_X = -BW / 2 + (BW - 11.31 - 8 * PITCH);   // 1re broche à gauche
+const TOP = BT / 2, BOT = -BT / 2;
+
+const TYPE_LABEL = { power: 'Alimentation', gnd: 'Masse', gpio: 'GPIO libre', shared: 'GPIO partagée', danger: 'Réservée USB', uart: 'UART', comp: 'Composant' };
+
+const stage = document.getElementById('stage');
+const tooltip = document.getElementById('tooltip');
+const panel = document.getElementById('panel');
+
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+} catch (e) {
+  document.getElementById('stage-loading').textContent = "WebGL n'est pas disponible sur ce navigateur.";
+  throw e;
+}
+document.getElementById('stage-loading').remove();
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+stage.prepend(renderer.domElement);
+
+const labelRenderer = new CSS2DRenderer();
+Object.assign(labelRenderer.domElement.style, { position: 'absolute', inset: '0', pointerEvents: 'none' });
+stage.appendChild(labelRenderer.domElement);
+
+const scene = new THREE.Scene();
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const camera = new THREE.PerspectiveCamera(32, 1, 1, 1000);
+const VIEWS = {
+  top: new THREE.Vector3(0, 44, -36),      // face écran, USB-C à gauche : l'écran se lit à l'endroit
+  bottom: new THREE.Vector3(0, -44, 36)    // face composants, USB-C à droite : comme la photo Waveshare
+};
+camera.position.copy(VIEWS.top);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.enablePan = false;
+controls.minDistance = 28;
+controls.maxDistance = 150;
+controls.autoRotate = false;  // désactivée par défaut, bouton Rotation pour la lancer
+controls.autoRotateSpeed = 0.7;
+
+const key = new THREE.DirectionalLight(0xffffff, 1.4);
+key.position.set(25, 40, -20);
+scene.add(key);
+const fill = new THREE.DirectionalLight(0xffd9c8, 0.5);
+fill.position.set(-30, -25, 30);
+scene.add(fill);
+
+// ---------------- Matériaux ----------------
+const M = {
+  pcb: new THREE.MeshStandardMaterial({ color: 0x131417, roughness: 0.55, metalness: 0.1 }),
+  pcbEdge: new THREE.MeshStandardMaterial({ color: 0x6f5d2e, roughness: 0.7 }),
+  gold: new THREE.MeshStandardMaterial({ color: 0xd9ae5c, roughness: 0.28, metalness: 1 }),
+  silver: new THREE.MeshStandardMaterial({ color: 0xc9cbd1, roughness: 0.3, metalness: 0.95 }),
+  chip: new THREE.MeshStandardMaterial({ color: 0x1f2024, roughness: 0.45, metalness: 0.2 }),
+  plastic: new THREE.MeshStandardMaterial({ color: 0x0d0d0f, roughness: 0.55 }),
+  button: new THREE.MeshStandardMaterial({ color: 0xdadbe0, roughness: 0.35, metalness: 0.6 }),
+  ceramic: new THREE.MeshStandardMaterial({ color: 0xe9e2d2, roughness: 0.6 }),
+  red: new THREE.MeshStandardMaterial({ color: 0xc23a2e, roughness: 0.6 }),
+  capTan: new THREE.MeshStandardMaterial({ color: 0x9c8661, roughness: 0.6 }),
+  resDark: new THREE.MeshStandardMaterial({ color: 0x222226, roughness: 0.5 }),
+  lcd: new THREE.MeshStandardMaterial({ color: 0x08080a, roughness: 0.18, metalness: 0.4 }),
+  acrylic: new THREE.MeshStandardMaterial({ color: 0xdfe8ff, roughness: 0.08, transparent: true, opacity: 0.22, emissive: 0x3b82f6, emissiveIntensity: 0.25, depthWrite: false }),
+  led: new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x3b82f6, emissiveIntensity: 2.5 })
+};
+
+const board = new THREE.Group();
+scene.add(board);
+
+const pickables = [];
+const pinObjs = {};
+const compObjs = {};
+
+function rbox(w, h, d, mat, x, y, z, r = 0.15) {
+  const m = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 2, Math.min(r, w / 2, h / 2, d / 2)), mat);
+  m.position.set(x, y, z);
+  board.add(m);
+  return m;
+}
+
+// Enregistre un composant cliquable ; ses matériaux sont clonés pour pouvoir le surligner seul.
+function registerComp(id, meshes, side) {
+  const mats = [];
+  meshes.forEach((m) => {
+    m.material = m.material.clone();
+    mats.push(m.material);
+    m.userData.pick = { kind: 'comp', id };
+    pickables.push(m);
+  });
+  compObjs[id] = { mats, side };
+}
+
+// ---------------- Circuit imprimé ----------------
+function roundedRect(w, h, r) {
+  const s = new THREE.Shape(), x = -w / 2, y = -h / 2;
+  s.moveTo(x + r, y);
+  s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r);
+  s.lineTo(x + w, y + h - r); s.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  s.lineTo(x + r, y + h); s.quadraticCurveTo(x, y + h, x, y + h - r);
+  s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y);
+  return s;
+}
+
+const pinPos = [];
+D.rowA.forEach((id, i) => pinPos.push({ id, x: PIN0_X + i * PITCH, z: ROW_Z, row: 'A' }));
+D.rowB.forEach((id, i) => pinPos.push({ id, x: PIN0_X + i * PITCH, z: -ROW_Z, row: 'B' }));
+const MOUNT = [[-16.4, 8.2], [-16.4, -8.2], [16.4, 8.2], [16.4, -8.2]];
+
+{
+  const shape = roundedRect(BW, BD, 2.2);
+  // La forme est dans le plan XY puis couchée : y de la forme = -z du monde.
+  pinPos.forEach((p) => { const h = new THREE.Path(); h.absarc(p.x, -p.z, 0.5, 0, Math.PI * 2, true); shape.holes.push(h); });
+  MOUNT.forEach(([x, z]) => { const h = new THREE.Path(); h.absarc(x, -z, 1.05, 0, Math.PI * 2, true); shape.holes.push(h); });
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: BT, bevelEnabled: false, curveSegments: 20 });
+  geo.rotateX(-Math.PI / 2);
+  geo.translate(0, BOT, 0);
+  board.add(new THREE.Mesh(geo, [M.pcb, M.pcbEdge]));
+}
+
+// Pastilles dorées des trous de fixation
+MOUNT.forEach(([x, z]) => {
+  [TOP + 0.01, BOT - 0.01].forEach((y, k) => {
+    const ring = new THREE.Mesh(new THREE.RingGeometry(1.05, 1.65, 40), M.gold);
+    ring.rotation.x = k === 0 ? -Math.PI / 2 : Math.PI / 2;
+    ring.position.set(x, y, z);
+    board.add(ring);
+  });
+  const tube = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.05, BT, 32, 1, true), M.gold);
+  tube.material = M.gold.clone(); tube.material.side = THREE.DoubleSide;
+  tube.position.set(x, 0, z);
+  board.add(tube);
+});
+
+// ---------------- Sérigraphie (face composants) ----------------
+{
+  const S = 56, cw = Math.round(BW * S), ch = Math.round(BD * S);
+  const cv = document.createElement('canvas');
+  cv.width = cw; cv.height = ch;
+  const c = cv.getContext('2d');
+  const px = (x) => (x + BW / 2) * S, py = (z) => (BD / 2 - z) * S;
+  c.fillStyle = '#e8e8ea';
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.font = `600 ${1.05 * S}px Arial, sans-serif`;
+  pinPos.forEach((p) => c.fillText(p.id, px(p.x), py(p.z + (p.z > 0 ? -1.75 : 1.75))));
+  c.font = `600 ${0.95 * S}px Arial, sans-serif`;
+  c.fillText('BOOT', px(11.8), py(6.9));
+  c.fillText('RST', px(11.8), py(-6.9));
+  c.save();
+  c.translate(px(-14.4), py(0.6));
+  c.rotate(Math.PI / 2);
+  c.font = `600 ${0.85 * S}px Arial, sans-serif`;
+  c.fillText('ESP32-C6-LCD-1.47', 0, 0);
+  c.restore();
+  // Cadres de sérigraphie autour de quelques composants
+  c.strokeStyle = 'rgba(232,232,234,.55)';
+  c.lineWidth = 0.12 * S;
+  c.setLineDash([0.35 * S, 0.3 * S]);
+  [[-7.0, 1.8, 6.6, 6.6], [1.4, 5.4, 4.2, 2.8], [-9.4, 5.1, 2.9, 2.4]].forEach(([x, z, w, d]) => c.strokeRect(px(x - w / 2), py(z + d / 2), w * S, d * S));
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  const silk = new THREE.Mesh(new THREE.PlaneGeometry(BW, BD), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+  silk.rotation.x = Math.PI / 2;      // face vers le bas
+  silk.position.y = BOT - 0.012;
+  board.add(silk);
+}
+
+// ---------------- Broches ----------------
+const ringGeo = new THREE.RingGeometry(0.5, 0.88, 32);
+const tubeGeo = new THREE.CylinderGeometry(0.5, 0.5, BT, 24, 1, true);
+const hitGeo = new THREE.CylinderGeometry(1.2, 1.2, BT + 1.2, 12);
+const hitMat = new THREE.MeshBasicMaterial({ visible: false });
+
+pinPos.forEach((p) => {
+  const mat = M.gold.clone();
+  mat.side = THREE.DoubleSide;
+  const g = new THREE.Group();
+  g.position.set(p.x, 0, p.z);
+  [[TOP + 0.015, -Math.PI / 2], [BOT - 0.015, Math.PI / 2]].forEach(([y, rx]) => {
+    const r = new THREE.Mesh(ringGeo, mat);
+    r.rotation.x = rx; r.position.y = y;
+    g.add(r);
+  });
+  g.add(new THREE.Mesh(tubeGeo, mat));
+  const hit = new THREE.Mesh(hitGeo, hitMat);
+  hit.userData.pick = { kind: 'pin', id: p.id };
+  g.add(hit);
+  pickables.push(hit);
+
+  const el = document.createElement('div');
+  el.className = 'pin-label';
+  el.textContent = p.id;
+  const label = new CSS2DObject(el);
+  label.position.set(0, 0, p.z > 0 ? 2.9 : -2.9);
+  g.add(label);
+
+  board.add(g);
+  pinObjs[p.id] = { mats: [mat], label, el, group: g };
+});
+
+// ---------------- Composants, face composants (Y négatif) ----------------
+const under = (h) => BOT - h / 2;
+
+registerComp('esp32', [rbox(5, 0.85, 5, M.chip, -7.0, under(0.85), 1.8, 0.2)], 'bottom');
+registerComp('crystal', [rbox(2.0, 0.6, 1.6, M.silver, -9.4, under(0.6), 5.1, 0.15)], 'bottom');
+registerComp('ldo', [rbox(2.9, 1.1, 1.6, M.chip, 1.4, under(1.1), 5.4, 0.15)], 'bottom');
+registerComp('tf', [rbox(7.2, 1.4, 13.2, M.silver, 7.4, under(1.4), -0.05, 0.25)], 'bottom');
+{
+  const body = rbox(7.4, 3.2, 8.9, M.silver, 15.3, under(3.2), 0, 1.3);
+  const hole = rbox(0.4, 2.0, 7.3, M.plastic, 18.85, under(3.2), 0, 0.15);
+  registerComp('usb', [body, hole], 'bottom');
+}
+[['boot', 1], ['reset', -1]].forEach(([id, s]) => {
+  const body = rbox(3.6, 1.6, 2.4, M.button, 11.8, under(1.6), s * 8.96, 0.2);
+  const act = rbox(1.4, 0.9, 1.1, M.plastic, 11.8, under(1.6), s * 10.6, 0.2);
+  registerComp(id, [body, act], 'bottom');
+});
+{
+  const pad = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 6.8), M.red);
+  pad.rotation.x = Math.PI / 2;
+  pad.position.set(-16.6, BOT - 0.008, 0.8);
+  board.add(pad);
+  registerComp('antenna', [rbox(1.8, 1.0, 5.4, M.ceramic, -16.6, under(1.0), 0.8, 0.12), pad], 'bottom');
+}
+
+// Petits composants passifs (décor, non cliquables), placés de façon déterministe
+{
+  let seed = 7;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const busy = [[-9.5, -4.5, -0.7, 4.3], [-10.4, -8.4, 4.3, 5.9], [-0.1, 2.9, 4.6, 6.2], [3.8, 19, -6.7, 6.6], [-18.2, -14, -7, 7], [10, 13.6, 7.6, 10.2], [10, 13.6, -10.2, -7.6]];
+  let placed = 0;
+  for (let n = 0; n < 400 && placed < 34; n++) {
+    const x = -13 + rnd() * 16, z = -6.6 + rnd() * 13.2, rot = rnd() < 0.5;
+    const w = rot ? 0.5 : 1.0, d = rot ? 1.0 : 0.5;
+    const hit = busy.some(([x0, x1, z0, z1]) => x + w / 2 > x0 - 0.3 && x - w / 2 < x1 + 0.3 && z + d / 2 > z0 - 0.3 && z - d / 2 < z1 + 0.3);
+    if (hit) continue;
+    busy.push([x - w / 2, x + w / 2, z - d / 2, z + d / 2]);
+    rbox(w, 0.45, d, rnd() < 0.55 ? M.capTan : M.resDark, x, under(0.45), z, 0.08);
+    placed++;
+  }
+}
+
+// ---------------- Face écran (Y positif) ----------------
+const ACR_H = 2.0, LCD_H = 2.2;
+const ledMesh = rbox(1.6, 0.6, 1.6, M.led, -3, TOP + 0.3, 0, 0.1);
+registerComp('led', [ledMesh], 'top');
+const ledLight = new THREE.PointLight(0x3b82f6, 6, 30, 1.6);
+ledLight.position.set(-3, TOP + 1, 0);
+board.add(ledLight);
+
+const acrylic = rbox(35.6, ACR_H, 16, M.acrylic, 0, TOP + ACR_H / 2, 0, 0.6);
+acrylic.renderOrder = 2;
+
+const lcdY = TOP + ACR_H + LCD_H / 2;
+const lcdBody = rbox(36.0, LCD_H, 17.2, M.lcd, 0, lcdY, 0, 0.7);
+
+// Écran : texture dessinée par js/screen.js, rafraîchie chaque seconde
+const SC = window.MINI_SCREEN;
+const screenCanvas = document.createElement('canvas');
+screenCanvas.width = SC.W * 3; screenCanvas.height = SC.H * 3;
+const screenCtx = screenCanvas.getContext('2d');
+const screenTex = new THREE.CanvasTexture(screenCanvas);
+screenTex.colorSpace = THREE.SRGBColorSpace;
+screenTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+const screenH = 15.4, screenW = screenH * SC.W / SC.H;
+const screen = new THREE.Mesh(new THREE.PlaneGeometry(screenW, screenH), new THREE.MeshBasicMaterial({ map: screenTex, toneMapped: false }));
+// Plan couché face vers le haut, tourné pour se lire USB-C à gauche
+screen.rotation.set(-Math.PI / 2, 0, Math.PI);
+screen.position.set(0.4, lcdY + LCD_H / 2 + 0.02, 0);
+board.add(screen);
+registerComp('lcd', [lcdBody], 'top');
+screen.userData.pick = { kind: 'comp', id: 'lcd' };
+pickables.push(screen);
+
+function refreshScreen() {
+  const col = window.drawMiniScreen(screenCtx, 3, new Date());
+  screenTex.needsUpdate = true;
+  const c = col;   // nuance de la jauge 5 h, comme la vraie LED
+  compObjs.led.mats[0].emissive.setHex(c);
+  M.acrylic.emissive.setHex(c);
+  ledLight.color.setHex(c);
+}
+refreshScreen();
+setInterval(refreshScreen, 1000);
+
+// Ombre douce au sol (invisible par en dessous : face unique)
+{
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 256;
+  const c = cv.getContext('2d');
+  const g = c.createRadialGradient(128, 128, 10, 128, 128, 128);
+  g.addColorStop(0, 'rgba(0,0,0,.55)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  c.fillStyle = g; c.fillRect(0, 0, 256, 256);
+  const shadow = new THREE.Mesh(new THREE.PlaneGeometry(70, 46), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthWrite: false }));
+  shadow.rotation.x = -Math.PI / 2;
+  shadow.position.y = -9;
+  scene.add(shadow);
+}
+
+// ---------------- Sélection et survol ----------------
+let hovered = null, selected = null;
+const ACCENT = new THREE.Color(0xd97757);
+
+function objOf(p) { return p.kind === 'pin' ? pinObjs[p.id] : compObjs[p.id]; }
+function infoOf(p) { return p.kind === 'pin' ? D.pins[p.id] : D.components[p.id]; }
+function same(a, b) { return a && b && a.kind === b.kind && a.id === b.id; }
+
+function paint(p, intensity) {
+  if (!p) return;
+  objOf(p).mats.forEach((m) => { m.emissive.copy(ACCENT); m.emissiveIntensity = intensity; });
+}
+function unpaint(p) {
+  if (!p) return;
+  if (p.kind === 'comp' && p.id === 'led') return;   // la LED garde sa propre lueur
+  objOf(p).mats.forEach((m) => { m.emissive.setHex(0x000000); m.emissiveIntensity = 1; });
+}
+
+function typeOf(p) { return p.kind === 'pin' ? D.pins[p.id].type : 'comp'; }
+
+function esc(s) { return String(s).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch])); }
+
+function renderPanel(p) {
+  if (!p) {
+    panel.innerHTML = `
+      <span class="badge">Explorateur</span>
+      <div class="panel-empty">
+        <h3 style="color:var(--text)">Cliquez sur la carte</h3>
+        <p>Chaque broche dorée et chaque composant est cliquable. Vous pouvez aussi passer par la rangée de broches sous la scène.</p>
+        <p>Retournez la carte avec « Face composants » pour voir la puce, l'USB-C, le lecteur microSD et les boutons.</p>
+        <div class="legend">
+          <span class="t-power"><i></i>Alimentation</span>
+          <span class="t-gnd"><i></i>Masse</span>
+          <span class="t-gpio"><i></i>GPIO libre</span>
+          <span class="t-shared"><i></i>GPIO partagée</span>
+          <span class="t-danger"><i></i>Réservée USB</span>
+          <span class="t-uart"><i></i>UART</span>
+          <span class="t-comp"><i></i>Composant</span>
+        </div>
+      </div>`;
+    return;
+  }
+  const info = infoOf(p), t = typeOf(p);
+  panel.innerHTML = `
+    <span class="badge typed t-${t}">${esc(TYPE_LABEL[t])}</span>
+    <div><h3>${esc(info.title)}</h3><div class="sub">${esc(info.sub)}</div></div>
+    <div class="fn-list">${info.fn.map((f) => `<span>${esc(f)}</span>`).join('')}</div>
+    <p class="desc">${esc(info.desc)}</p>
+    ${info.warn ? `<div class="note warn"><b>Attention</b>${esc(info.warn)}</div>` : ''}
+    ${info.project ? `<div class="note project"><b>Dans MDMA</b>${esc(info.project)}</div>` : ''}`;
+}
+
+function select(p, fromGrid = false) {
+  if (selected) {
+    unpaint(selected);
+    if (selected.kind === 'pin') pinObjs[selected.id].el.classList.remove('sel');
+  }
+  selected = same(selected, p) ? null : p;
+  if (selected) {
+    paint(selected, 0.9);
+    if (selected.kind === 'pin') pinObjs[selected.id].el.classList.add('sel');
+    if (selected.kind === 'comp') {
+      // Retourne la carte si le composant est sur l'autre face
+      const side = compObjs[selected.id].side;
+      if ((side === 'bottom') !== (camera.position.y < 0)) flyTo(side);
+    }
+  }
+  document.querySelectorAll('.pin-btn').forEach((b) => b.setAttribute('aria-pressed', String(!!selected && selected.kind === 'pin' && b.dataset.pin === selected.id)));
+  renderPanel(selected);
+  if (fromGrid) stopAutoRotate();
+}
+
+// Rangées de broches HTML
+function buildRow(el, ids) {
+  ids.forEach((id) => {
+    const b = document.createElement('button');
+    b.className = `pin-btn t-${D.pins[id].type}`;
+    b.dataset.pin = id;
+    b.textContent = id;
+    b.setAttribute('aria-pressed', 'false');
+    b.title = D.pins[id].title + ' · ' + D.pins[id].sub;
+    b.addEventListener('click', () => select({ kind: 'pin', id }, true));
+    b.addEventListener('mouseenter', () => { if (!same(selected, { kind: 'pin', id })) paint({ kind: 'pin', id }, 0.45); });
+    b.addEventListener('mouseleave', () => { if (!same(selected, { kind: 'pin', id })) unpaint({ kind: 'pin', id }); });
+    el.appendChild(b);
+  });
+}
+buildRow(document.getElementById('row-a'), D.rowA);
+buildRow(document.getElementById('row-b'), D.rowB);
+renderPanel(null);
+
+const raycaster = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+function pickAt(ev) {
+  const r = renderer.domElement.getBoundingClientRect();
+  ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+  raycaster.setFromCamera(ndc, camera);
+  const hit = raycaster.intersectObjects(pickables, false)[0];
+  return hit ? hit.object.userData.pick : null;
+}
+
+renderer.domElement.addEventListener('pointermove', (ev) => {
+  if (ev.pointerType !== 'mouse') return;
+  const p = pickAt(ev);
+  if (!same(p, hovered)) {
+    if (hovered && !same(hovered, selected)) unpaint(hovered);
+    hovered = p;
+    if (hovered && !same(hovered, selected)) paint(hovered, 0.45);
+  }
+  stage.classList.toggle('hovering', !!p);
+  if (p) {
+    const r = stage.getBoundingClientRect();
+    const info = infoOf(p);
+    tooltip.textContent = info.title + ' · ' + info.sub;
+    tooltip.style.left = (ev.clientX - r.left) + 'px';
+    tooltip.style.top = (ev.clientY - r.top) + 'px';
+    tooltip.style.opacity = '1';
+  } else {
+    tooltip.style.opacity = '0';
+  }
+});
+renderer.domElement.addEventListener('pointerleave', () => {
+  if (hovered && !same(hovered, selected)) unpaint(hovered);
+  hovered = null;
+  tooltip.style.opacity = '0';
+  stage.classList.remove('hovering');
+});
+
+let downAt = null;
+renderer.domElement.addEventListener('pointerdown', (ev) => { downAt = [ev.clientX, ev.clientY]; });
+renderer.domElement.addEventListener('pointerup', (ev) => {
+  if (!downAt) return;
+  const moved = Math.hypot(ev.clientX - downAt[0], ev.clientY - downAt[1]);
+  downAt = null;
+  if (moved > 5) return;
+  const p = pickAt(ev);
+  if (p) select(p);
+});
+
+// ---------------- Vues, étiquettes, rotation ----------------
+const rotateBtn = document.getElementById('btn-rotate');
+function stopAutoRotate() { controls.autoRotate = false; rotateBtn.setAttribute('aria-pressed', 'false'); }
+controls.addEventListener('start', stopAutoRotate);
+rotateBtn.addEventListener('click', () => {
+  controls.autoRotate = !controls.autoRotate;
+  rotateBtn.setAttribute('aria-pressed', String(controls.autoRotate));
+});
+
+const labelsBtn = document.getElementById('btn-labels');
+labelsBtn.addEventListener('click', () => {
+  const on = labelsBtn.getAttribute('aria-pressed') !== 'true';
+  labelsBtn.setAttribute('aria-pressed', String(on));
+  Object.values(pinObjs).forEach((o) => { o.label.visible = on; });
+});
+
+let flight = null;
+function flyTo(view) {
+  const from = camera.position.clone();
+  const dist = from.length();
+  const to = VIEWS[view].clone().setLength(Math.min(Math.max(dist, 45), 90));
+  flight = { from, to, t0: performance.now(), dur: 750 };
+  document.querySelectorAll('[data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === view)));
+}
+document.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => { stopAutoRotate(); flyTo(b.dataset.view); }));
+
+// Lien direct : ?view=bottom&select=pin:12 ou ?select=comp:esp32
+{
+  const q = new URLSearchParams(location.search);
+  if (q.get('view') === 'bottom') { stopAutoRotate(); camera.position.copy(VIEWS.bottom); flyTo('bottom'); }
+  const s = (q.get('select') || '').split(':');
+  if ((s[0] === 'pin' && D.pins[s[1]]) || (s[0] === 'comp' && D.components[s[1]])) { stopAutoRotate(); select({ kind: s[0], id: s[1] }); }
+}
+
+// ---------------- Boucle de rendu ----------------
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w, h, false);
+  labelRenderer.setSize(w, h);
+  camera.aspect = w / h;
+  // Sur écran étroit, on recule pour garder la carte entière dans le cadre
+  camera.zoom = w < 520 ? 0.72 : 1;
+  camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(stage);
+resize();
+
+let visible = true;
+new IntersectionObserver(([e]) => { visible = e.isIntersecting; }).observe(stage);
+
+// ---------------- Modèle CAO officiel (Waveshare) ----------------
+// Converti du STEP par tools/step2glb. S'il ne charge pas (page ouverte en file://,
+// réseau…), le modèle simplifié construit plus haut reste affiché.
+const modelBadge = document.getElementById('model-badge');
+const COMP_OF_PART = {
+  'USER_LIBRARY-ESP8266EX': 'esp32',     // nom de bibliothèque réutilisé par le dessinateur
+  'EXTRUDED-335204': 'crystal',
+  'SHELL': 'tf', '': 'tf',               // les sous-pièces du lecteur microSD n'ont pas de nom
+  '1_47INCH-172X320-LCD': 'lcd',
+  'EXTRUDED-335599': 'led',
+  'C3': 'antenna'
+};
+function compOfPart(part, center) {
+  if (part.startsWith('SOLID-')) return 'usb';
+  if (part === 'SWITCH-TS24CA') return center.z > 0 ? 'boot' : 'reset';
+  return COMP_OF_PART[part] ?? null;
+}
+
+new GLTFLoader().load('assets/models/esp32-c6-lcd-1.47.glb', (gltf) => {
+  const real = gltf.scene;
+  // STEP : X = largeur, Y = longueur (USB-C vers -Y), Z = épaisseur (écran vers +Z).
+  // Scène : X = longueur (USB-C vers +X), Y = épaisseur, Z = largeur.
+  // Rotation pure (déterminant +1, donc pas d'effet miroir) + centrage du circuit imprimé.
+  real.matrixAutoUpdate = false;
+  real.matrix.set(0, -1, 0, -1.0, 0, 0, 1, 3.25, -1, 0, 0, 0, 0, 0, 0, 1);
+  board.add(real);
+  board.updateMatrixWorld(true);
+
+  // Masque le modèle simplifié, sauf les broches, l'écran et la lumière de la LED
+  const keep = new Set([real, screen, ledLight, ...Object.values(pinObjs).map((o) => o.group)]);
+  board.children.forEach((c) => { if (!keep.has(c)) c.visible = false; });
+
+  const lcdMat = new THREE.MeshStandardMaterial({ color: 0x0b0b0d, roughness: 0.2, metalness: 0.3 });
+  const ledMat = compObjs.led.mats[0];
+  const found = {};
+  const box = new THREE.Box3(), center = new THREE.Vector3();
+  real.traverse((o) => {
+    if (!o.isMesh) return;
+    let node = o;
+    while (node.parent && node.parent !== real) node = node.parent;
+    const part = node.userData.part ?? '';
+    if (part === 'ESP32-S3-LCD-1_47-PMMA') { o.material = M.acrylic; o.renderOrder = 2; return; }
+    box.setFromObject(node).getCenter(center);
+    board.worldToLocal(center);
+    const id = compOfPart(part, center);
+    if (!id) return;
+    if (id === 'lcd') o.material = lcdMat;
+    else if (id === 'led') o.material = ledMat;
+    else if (id === 'antenna') o.material = M.ceramic.clone();
+    else o.material = o.material.clone();
+    o.userData.pick = { kind: 'comp', id };
+    (found[id] ||= []).push(o);
+  });
+
+  // Cibles de clic : broches, écran, puis les pièces du modèle
+  pickables.length = 0;
+  Object.values(pinObjs).forEach((o) => o.group.children.forEach((c) => { if (c.userData.pick) pickables.push(c); }));
+  pickables.push(screen);
+  Object.entries(found).forEach(([id, meshes]) => {
+    compObjs[id].mats = [...new Set(meshes.map((m) => m.material))];
+    meshes.forEach((m) => pickables.push(m));
+  });
+  // Le régulateur n'est pas modélisé : zone cliquable invisible à sa place (photo Waveshare)
+  const ldoHit = new THREE.Mesh(new THREE.BoxGeometry(3, 1.4, 2), hitMat);
+  ldoHit.position.set(0.6, BOT - 0.7, 5.2);
+  ldoHit.userData.pick = { kind: 'comp', id: 'ldo' };
+  board.add(ldoHit);
+  pickables.push(ldoHit);
+  compObjs.ldo.mats = [];
+
+  // L'écran se pose sur la vitre réelle, à la taille de la zone active (32,35 × 17,39 mm)
+  screen.position.set(0.32, 4.72, 0);
+  screen.scale.set(32.35 / screenW, 17.39 / screenH, 1);
+  ledLight.position.set(0, 1.2, 0);
+
+  if (selected) paint(selected, 0.9);
+  modelBadge.textContent = 'Modèle CAO Waveshare';
+}, undefined, () => {
+  modelBadge.textContent = 'Modèle simplifié';
+});
+
+// Masque les étiquettes cachées derrière la carte (CSS2D ne gère pas la profondeur)
+const occluders = [];
+board.traverse((o) => { if (o.isMesh && o.material !== hitMat && o !== acrylic) occluders.push(o); });
+const occRay = new THREE.Raycaster();
+const tmp = new THREE.Vector3();
+function updateLabelOcclusion() {
+  Object.values(pinObjs).forEach((o) => {
+    o.label.getWorldPosition(tmp);
+    const dist = camera.position.distanceTo(tmp);
+    occRay.set(camera.position, tmp.clone().sub(camera.position).normalize());
+    occRay.far = dist - 0.3;
+    o.el.classList.toggle('hidden', occRay.intersectObjects(occluders, false).length > 0);
+  });
+}
+
+const ease = (t) => 1 - Math.pow(1 - t, 3);
+renderer.setAnimationLoop((now) => {
+  if (!visible) return;
+  if (flight) {
+    const t = Math.min(1, (now - flight.t0) / flight.dur);
+    // Interpolation sur la sphère pour passer par le côté plutôt qu'à travers la carte
+    const a = flight.from.clone().normalize(), b = flight.to.clone().normalize();
+    const q = new THREE.Quaternion().setFromUnitVectors(a, b);
+    const qt = new THREE.Quaternion().slerp(q, ease(t));
+    const len = THREE.MathUtils.lerp(flight.from.length(), flight.to.length(), ease(t));
+    camera.position.copy(a.applyQuaternion(qt).setLength(len));
+    if (t >= 1) flight = null;
+  }
+  if (selected) {
+    const pulse = 0.65 + 0.35 * Math.sin(now / 260);
+    objOf(selected).mats.forEach((m) => { m.emissiveIntensity = pulse; });
+  }
+  controls.update();
+  if (labelsBtn.getAttribute('aria-pressed') === 'true') updateLabelOcclusion();
+  renderer.render(scene, camera);
+  labelRenderer.render(scene, camera);
+});
+</script>
+</body>
+</html>

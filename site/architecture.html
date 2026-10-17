@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="color-scheme" content="dark light">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MDMA - MiniDisplay MiniAutomations</title>
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <meta name="description" content="Vue d'ensemble de MDMA : comment le quota Claude voyage de l'API jusqu'à l'écran, et pourquoi le PC fait le travail réseau.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+  <link rel="stylesheet" href="style.css">
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="docs.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap">
+    <a class="brand" href="index.html" title="MDMA : MiniDisplay MiniAutomations"><span class="brand-mark" aria-hidden="true"></span>MDMA</a>
+    <div class="nav-links">
+      <div class="nav-drop">
+        <button type="button" class="on" aria-haspopup="true">Documentation</button>
+        <div class="nav-menu">
+          <a href="architecture.html" aria-current="page"><span>1</span>Architecture</a>
+          <a href="pont.html"><span>2</span>Le pont PC</a>
+          <a href="firmware.html"><span>3</span>Le firmware</a>
+          <a href="materiel.html"><span>4</span>La carte</a>
+          <a href="guide.html"><span>5</span>Guide pas à pas</a>
+        </div>
+      </div>
+      <a href="boitiers.html">Boîtiers</a>
+      <a href="https://github.com/ilsnpn/minidisplay-miniautomations" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="doc-hero">
+  <div class="wrap">
+    <span class="kicker">Comprendre · 1 / 5</span>
+    <h1>Architecture : du serveur de Claude à l'écran</h1>
+    <p class="lead">Ce que fait chaque maillon, comment circulent les données, à quel rythme, et pourquoi la carte ne se connecte à aucun réseau.</p>
+    <div class="doc-meta"><span>Lecture : 8 min</span><span>Niveau : débutant</span><span>Mis à jour le 17/10/2026</span></div>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="toc">
+    <div class="cap">Sur cette page</div>
+    <a href="#probleme">Le besoin</a>
+    <a href="#chaine">La chaîne complète</a>
+    <a href="#pourquoi-pc">Pourquoi passer par le PC</a>
+    <a href="#roles">Qui fait quoi</a>
+    <a href="#sequence">Le trajet d'une donnée</a>
+    <a href="#rythmes">Les rythmes</a>
+    <a href="#pannes">Quand quelque chose casse</a>
+    <a href="#depot">Le dépôt</a>
+  </aside>
+
+  <article class="prose">
+
+    <section id="probleme">
+      <h2><span class="n">01</span>Le besoin</h2>
+      <p>Un abonnement Claude impose deux limites d'utilisation qui se remettent à zéro toutes seules : une <strong>fenêtre de 5 heures</strong> (la « session ») et une <strong>fenêtre de 7 jours</strong> (la « semaine »). Les dépasser bloque l'utilisation jusqu'à la remise à zéro.</p>
+      <p>Il existait déjà un widget Windows (<code>ClaudeStatus</code>) qui affiche ces deux jauges dans un coin de l'écran. MDMA déplace cette information sur un <strong>écran physique dédié</strong>, posé sur le bureau. Il reste visible quand les fenêtres du PC le recouvriraient, et ne coûte pas un pixel à l'écran principal.</p>
+      <div class="callout key">
+        <b>L'idée en une phrase</b>
+        <p>Le PC récupère les chiffres auprès de Claude, puis les envoie par le câble USB à une petite carte ESP32-C6 qui les dessine sur son écran.</p>
+      </div>
+    </section>
+
+    <section id="chaine">
+      <h2><span class="n">02</span>La chaîne complète</h2>
+      <p>Il y a quatre maillons. Seul le premier est sur Internet. Les trois autres tiennent sur le bureau, reliés par un simple câble USB-C.</p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 960 340" role="img" aria-label="Schéma : serveurs Claude, PC avec le pont, carte ESP32-C6, écran">
+          <defs>
+            <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="d-arrow"/></marker>
+            <marker id="ara" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="d-arrow-acc"/></marker>
+          </defs>
+          <!-- zones -->
+          <rect x="8" y="22" width="232" height="300" rx="16" class="d-dash"/>
+          <text x="24" y="44" class="d-mono">INTERNET</text>
+          <rect x="270" y="22" width="682" height="300" rx="16" class="d-dash"/>
+          <text x="286" y="44" class="d-mono">VOTRE BUREAU · la carte n'a aucun accès réseau</text>
+
+          <!-- Claude -->
+          <rect x="24" y="70" width="200" height="130" rx="12" class="d-box"/>
+          <text x="40" y="100" class="d-title">Serveurs Claude</text>
+          <text x="40" y="126" class="d-mono">api.anthropic.com</text>
+          <text x="40" y="144" class="d-mono">  /api/oauth/usage</text>
+          <text x="40" y="172" class="d-mono">status.claude.com</text>
+
+          <!-- PC -->
+          <rect x="300" y="70" width="210" height="130" rx="12" class="d-acc"/>
+          <text x="316" y="100" class="d-title">PC Windows</text>
+          <text x="316" y="126" class="d-mono-acc">MiniDisplayBridge.ps1</text>
+          <text x="316" y="148" class="d-text">le « pont », PowerShell 5.1</text>
+          <text x="316" y="168" class="d-text">tourne en arrière-plan</text>
+
+          <!-- Jeton -->
+          <rect x="300" y="240" width="210" height="62" rx="10" class="d-box-2"/>
+          <text x="316" y="265" class="d-title" style="font-size:13.5px">Jeton Claude Code</text>
+          <text x="316" y="286" class="d-mono">~\.claude\.credentials.json</text>
+          <path d="M405 240 L405 206" class="d-dash" marker-end="url(#ar)"/>
+
+          <!-- ESP32 -->
+          <rect x="590" y="70" width="190" height="130" rx="12" class="d-box"/>
+          <text x="606" y="100" class="d-title">ESP32-C6</text>
+          <text x="606" y="126" class="d-mono">firmware claude_usage</text>
+          <text x="606" y="148" class="d-text">Arduino · C++</text>
+          <text x="606" y="168" class="d-text">dessine, ne calcule pas</text>
+
+          <!-- Écran -->
+          <rect x="818" y="70" width="120" height="130" rx="12" class="d-box"/>
+          <text x="834" y="100" class="d-title">Écran</text>
+          <text x="834" y="124" class="d-mono">ST7789</text>
+          <text x="834" y="142" class="d-mono">320×172</text>
+          <text x="834" y="170" class="d-text">+ LED RGB</text>
+
+          <!-- flèches -->
+          <path d="M296 120 L228 120" class="d-line" marker-end="url(#ar)"/>
+          <path d="M228 150 L296 150" class="d-line" marker-end="url(#ar)"/>
+          <text x="236" y="112" class="d-mono" style="font-size:10px">requête</text>
+          <text x="236" y="168" class="d-mono" style="font-size:10px">JSON</text>
+
+          <path d="M512 135 L586 135" class="d-line-acc" marker-end="url(#ara)"/>
+          <text x="516" y="126" class="d-mono-acc" style="font-size:10.5px">USB série</text>
+          <text x="516" y="154" class="d-mono" style="font-size:10px">trame/30 s</text>
+
+          <path d="M782 135 L814 135" class="d-line" marker-end="url(#ar)"/>
+          <text x="784" y="226" class="d-mono" style="font-size:10.5px">SPI 40 MHz →</text>
+
+          <text x="40" y="232" class="d-text">≤ 1 appel / 5 min</text>
+          <text x="40" y="252" class="d-text">+ état des services</text>
+          <text x="590" y="236" class="d-text">reçoit une ligne de texte,</text>
+          <text x="590" y="256" class="d-text">la décode, redessine</text>
+          <text x="590" y="276" class="d-text">l'écran toutes les 5 s</text>
+        </svg>
+        <figcaption>Les quatre maillons. Seul le PC parle à Internet ; la carte ne reçoit que des chiffres.</figcaption>
+      </figure>
+
+      <ol>
+        <li><strong>Les serveurs de Claude</strong> connaissent votre consommation. Un endpoint renvoie, pour chaque fenêtre, le pourcentage consommé et l'heure de remise à zéro.</li>
+        <li><strong>Le pont</strong>, un script PowerShell sur le PC, interroge cet endpoint avec le jeton que Claude Code a déjà déposé sur la machine, puis met les chiffres en forme. → <a href="pont.html">Page dédiée</a></li>
+        <li><strong>La carte ESP32-C6</strong> reçoit une ligne de texte par l'USB, la décode et dessine l'écran. → <a href="firmware.html">Page dédiée</a></li>
+        <li><strong>L'écran et la LED</strong> affichent le résultat. → <a href="materiel.html">Page dédiée</a></li>
+      </ol>
+    </section>
+
+    <section id="pourquoi-pc">
+      <h2><span class="n">03</span>Pourquoi passer par le PC ?</h2>
+      <p>L'ESP32-C6 a du Wi-Fi. Elle pourrait interroger Claude toute seule. Ce choix a été écarté pour trois raisons :</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Critère</th><th>Carte autonome en Wi-Fi</th><th>Pont USB (retenu)</th></tr></thead>
+          <tbody>
+            <tr><td>Réseau d'entreprise</td><td>Un appareil inconnu connecté en permanence, visible par l'IT, même sur le réseau invité</td><td><strong>Aucune connexion réseau.</strong> La carte n'est qu'un périphérique USB</td></tr>
+            <tr><td>Le jeton d'accès</td><td>Il faudrait le copier sur la carte. Or il expire au bout d'une heure environ et n'est renouvelé que par Claude Code, sur le PC</td><td>Le pont relit le jeton à chaque appel : toujours à jour, et <strong>il ne quitte jamais le PC</strong></td></tr>
+            <tr><td>Configuration</td><td>Saisir le SSID et le mot de passe, gérer le certificat TLS, les reconnexions…</td><td>Brancher le câble. Le port est détecté tout seul</td></tr>
+            <tr><td>Contrepartie</td><td>Fonctionne PC éteint</td><td>Nécessite que le PC soit allumé, ce qui est le cas quand on utilise Claude</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout info">
+        <b>Principe de conception</b>
+        <p>La carte est volontairement « bête » : elle ne possède aucun secret, ne parle à aucun serveur et ne fait que de l'affichage. Toute l'intelligence réseau reste sur le PC, plus facile à mettre à jour.</p>
+      </div>
+    </section>
+
+    <section id="roles">
+      <h2><span class="n">04</span>Qui fait quoi</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Tâche</th><th>Pont (PC)</th><th>Firmware (carte)</th></tr></thead>
+          <tbody>
+            <tr><td>Lire le jeton Claude Code</td><td>✔</td><td>—</td></tr>
+            <tr><td>Appeler l'API, gérer les refus (429, 401)</td><td>✔</td><td>—</td></tr>
+            <tr><td>Convertir les heures UTC en heure locale</td><td>✔</td><td>—</td></tr>
+            <tr><td>Retirer les accents des messages d'erreur</td><td>✔</td><td>—</td></tr>
+            <tr><td>Trouver le port COM de la carte</td><td>✔</td><td>—</td></tr>
+            <tr><td>Faire avancer l'horloge entre deux trames</td><td>—</td><td>✔</td></tr>
+            <tr><td>Calculer le repère de temps et la couleur des jauges</td><td>—</td><td>✔</td></tr>
+            <tr><td>Détecter que le PC ne répond plus</td><td>—</td><td>✔</td></tr>
+            <tr><td>Dessiner l'écran, piloter la LED</td><td>—</td><td>✔</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Le repère de temps est calculé par la carte, et non par le PC, parce qu'il avance en continu : la carte le recalcule toutes les 5 secondes sans attendre la trame suivante.</p>
+    </section>
+
+    <section id="sequence">
+      <h2><span class="n">05</span>Le trajet d'une donnée</h2>
+      <p>Voici ce qui se passe, dans l'ordre, entre le démarrage du pont et l'affichage :</p>
+      <figure class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant API as Serveurs Claude
+    participant P as Pont (PC)
+    participant C as Carte ESP32-C6
+    participant E as Écran
+    P->>P: lit le jeton dans .credentials.json
+    P->>API: GET /api/oauth/usage
+    API-->>P: JSON : utilization, resets_at
+    P->>API: GET status.claude.com
+    API-->>P: indicator : none
+    P->>C: trame Q (une ligne de texte)
+    C-->>P: OK
+    C->>E: dessine l'image hors écran puis l'envoie
+    loop toutes les 30 s
+        P->>C: trame Q (même contenu, heure à jour)
+    end
+    loop toutes les 5 s
+        C->>E: redessine (repère de temps, nuances)
+    end
+    Note over P,API: nouvel appel API 5 min plus tard
+</pre>
+        <figcaption>La carte confirme chaque trame par « OK ». Entre deux trames, elle continue seule.</figcaption>
+      </figure>
+    </section>
+
+    <section id="rythmes">
+      <h2><span class="n">06</span>Les rythmes</h2>
+      <p>Quatre horloges différentes cohabitent. Les distinguer aide beaucoup à comprendre le comportement de l'ensemble :</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Rythme</th><th>Qui</th><th>Pourquoi cette valeur</th></tr></thead>
+          <tbody>
+            <tr><td><strong>5 min</strong> · appel API</td><td>Pont</td><td>L'endpoint limite les appels (erreur 429). Le quota évolue lentement : 5 minutes suffisent largement.</td></tr>
+            <tr><td><strong>30 s</strong> · trame USB</td><td>Pont</td><td>Elle sert de « battement de cœur » : la carte sait que le PC est toujours là. Elle remet aussi l'horloge de la carte à l'heure.</td></tr>
+            <tr><td><strong>5 s</strong> · rafraîchissement</td><td>Carte</td><td>Il fait avancer le repère de temps et la nuance des jauges. Un rendu complet prend environ 25 ms.</td></tr>
+            <tr><td><strong>2 min</strong> · délai de silence</td><td>Carte</td><td>Sans trame depuis 2 minutes (4 trames manquées), la carte affiche « PC deconnecte » et grise les jauges.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="pannes">
+      <h2><span class="n">07</span>Quand quelque chose casse</h2>
+      <p>Chaque panne a un symptôme visible sur l'écran. C'est la meilleure aide au dépannage :</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Situation</th><th>Ce que montre l'écran</th><th>Que faire</th></tr></thead>
+          <tbody>
+            <tr><td>Le pont n'a jamais été lancé</td><td>« En attente du PC (lancez le pont USB)… »</td><td>Double-cliquer sur <code>Start-MiniDisplayBridge.vbs</code></td></tr>
+            <tr><td>PC en veille, pont arrêté, câble débranché</td><td>« PC deconnecte depuis X min », jauges grises</td><td>Rien : tout reprend dès la trame suivante</td></tr>
+            <tr><td>Claude Code fermé depuis plus d'une heure</td><td>« jeton expire, lancez Claude Code »</td><td>Ouvrir Claude Code, qui renouvelle le jeton</td></tr>
+            <tr><td>Trop d'appels à l'API (429)</td><td>« trop d'appels, nouvel essai dans N min », valeurs conservées</td><td>Attendre, ou couper le quota du widget s'il tourne aussi</td></tr>
+            <tr><td>status.claude.com injoignable</td><td>Pastille grise en haut à droite</td><td>Rien : le quota continue de s'afficher</td></tr>
+            <tr><td>Panne chez Claude</td><td>Pastille orange ou rouge</td><td>Consulter status.claude.com</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="depot">
+      <h2><span class="n">08</span>Le dépôt</h2>
+      <p>Tout le projet tient dans un dossier :</p>
+      <div class="code">
+        <div class="code-head"><span class="file">minidisplay-miniautomations/</span></div>
+<pre class="tree"><b>bridge/</b>                       <i># côté PC</i>
+  MiniDisplayBridge.ps1        <i># le pont</i>
+  Start-MiniDisplayBridge.vbs  <i># lanceur sans console</i>
+  Stop-MiniDisplayBridge.ps1   <i># arrêt (avant un téléversement)</i>
+  bridge.log                   <i># journal</i>
+<b>firmware/</b>                     <i># côté carte (Arduino)</i>
+  hello_world/                 <i># premier test de l'écran</i>
+  claude_usage/                <i># le firmware du projet</i>
+    claude_usage.ino
+    state.h
+<b>site/</b>                         <i># ce site</i>
+<b>docs/</b>                         <i># fiche matériel + photos fabricant</i>
+<b>ClaudeStatus/</b>                 <i># widget PC d'origine (référence)</i>
+README.md</pre>
+      </div>
+    </section>
+
+    <div class="pager">
+      <a href="index.html"><small>← Accueil</small><b>Présentation et explorateur 3D</b></a>
+      <a class="next" href="pont.html"><small>Suivant →</small><b>Le pont PC</b></a>
+    </div>
+  </article>
+</div>
+
+<footer>
+  <div class="wrap">
+    <span>MDMA - MiniDisplay MiniAutomations · 2026 Q4 · Projet perso</span>
+    <span><a href="guide.html">Refaire le projet pas à pas</a></span>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script src="js/docs.js"></script>
+</body>
+</html>

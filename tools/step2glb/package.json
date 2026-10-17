@@ -1,0 +1,13 @@
+{
+  "name": "step2glb",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Convertit le modèle STEP Waveshare en GLB pour l'explorateur 3D du site",
+  "type": "module",
+  "scripts": {
+    "convert": "node step2glb.mjs"
+  },
+  "dependencies": {
+    "occt-import-js": "0.0.22"
+  }
+}
