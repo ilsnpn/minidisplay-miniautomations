@@ -341,10 +341,10 @@ footer a { color: var(--muted); }
 }
 
 /* ---------- thèmes de l'écran ---------- */
-.theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+.theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
 .theme-card { margin: 0; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; }
 .theme-screen { background: #050507; padding: 10px; }
-.theme-screen img { display: block; width: 100%; height: auto; border-radius: 6px; image-rendering: pixelated; pointer-events: none; box-shadow: 0 0 0 4px #111, 0 8px 20px rgba(0, 0, 0, .5); }
+.theme-screen img { display: block; width: 100%; height: auto; border-radius: 6px; image-rendering: auto; pointer-events: none; box-shadow: 0 0 0 4px #111, 0 8px 20px rgba(0, 0, 0, .5); }
 .theme-card figcaption { padding: 10px 14px; font-weight: 600; font-size: 15px; border-bottom: 1px solid var(--line); }
 .theme-tabs { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 0 auto 24px; padding: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 999px; width: fit-content; max-width: 100%; }
 .theme-tabs button { font: 500 15px var(--mono); color: var(--muted); background: var(--card-2); border: 1px solid var(--line); border-radius: 999px; padding: 10px 22px; cursor: pointer; }
