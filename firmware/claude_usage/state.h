@@ -71,3 +71,19 @@ struct SiamSummary {
   int total = 0;          // commandes depuis le début
   char recent[64] = "";   // dernières personnes à avoir commandé
 };
+
+// Cours de bourse ou crypto (trame M, chaque minute)
+struct Market {
+  bool have = false;
+  uint32_t rxMs = 0;       // millis() à la réception
+  char symbol[12] = "";    // IART, BTC...
+  char name[40] = "";
+  char price[16] = "";     // déjà formaté par le pont
+  float pct = 0;           // variation en %
+  char currency[6] = "";
+  bool open = false;       // marché ouvert (toujours vrai en crypto)
+  uint32_t updated = 0;    // heure locale du relevé
+  char low[16] = "", high[16] = "";
+  uint8_t pts[64];         // courbe, 0..99
+  uint8_t n = 0;
+};

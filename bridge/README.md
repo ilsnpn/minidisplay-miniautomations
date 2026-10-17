@@ -35,6 +35,15 @@ Le pont appelle `GET https://api.elevenlabs.io/v1/user/subscription` toutes les 
 
 > `secrets.env` ne doit jamais être commité : il est listé dans `.gitignore`.
 
+## Option : cours de bourse
+
+Le pont suit une action ou une crypto, affichée dans la 8ᵉ vue.
+
+1. Copiez `settings.env.example` en `settings.env` (ignoré par Git) et indiquez le symbole : `MARKET_SYMBOL=AAPL`, ou `BTC`, `ETH`, `SOL`.
+2. Relancez le pont : le journal affiche `Bourse : suivi de AAPL`.
+
+Le cours vient de l'API de graphiques de Yahoo Finance (`/v8/finance/chart/<symbole>?range=1d&interval=5m`), publique et sans clé, relevée chaque minute. La variation se calcule sur la clôture de la veille, ou depuis minuit UTC pour une crypto.
+
 ## Ressources du PC
 
 Toutes les 3 s, le pont envoie le processeur et la mémoire (lus par WMI) ainsi que la charge et la température de la carte graphique (lues par `nvidia-smi`, cartes NVIDIA uniquement). Aucun droit administrateur n'est nécessaire. Ces trames ne sont pas journalisées.
@@ -45,6 +54,7 @@ Toutes les 3 s, le pont envoie le processeur et la mémoire (lus par WMI) ainsi 
 PC -> carte : Q;<now>;<five%>;<fiveReset>;<week%>;<weekReset>;<level>;<updated>;<erreur>
 PC -> carte : ?                      carte -> PC : MINIDISPLAY claude_usage 1
 PC -> carte : E;<utilises>;<limite>;<reset>;<updated>;<erreur>   (optionnelle, ElevenLabs)
+PC -> carte : M;<symbole>;<nom>;<cours>;<variation%>;<devise>;<ouvert>;<releve>;<min>;<max>;<points>   (cours, chaque minute)
 PC -> carte : P;<cpu%>;<ramUtiliseeMo>;<ramTotaleMo>;<gpu%>;<gpuTemp>   (toutes les 3 s, sans accusé)
 carte -> PC : OK                     (accusé de réception d'une trame Q ou E)
 ```

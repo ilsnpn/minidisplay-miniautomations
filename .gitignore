@@ -13,6 +13,7 @@ bridge/bridge.log
 bridge/secrets.env
 *.env
 !bridge/secrets.env.example
+!bridge/settings.env.example
 
 # Notes privées : roadmap et photos personnelles (non publiées)
 ROADMAP.md

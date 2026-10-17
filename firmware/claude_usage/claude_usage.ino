@@ -10,6 +10,8 @@
 // 6e vue : minuteur Pomodoro, autonome.
 //   S;<date>;<limite>;<ouvert>;<commandes>;<payees>;<devinettes>;<bonnes>;<total>;<derniers>
 //   7e vue : la semaine PALais SIAM, toujours aux couleurs du site quel que soit le thème.
+//   M;<symbole>;<nom>;<cours>;<variation%>;<devise>;<ouvert>;<releve>;<min>;<max>;<points>
+//   8e vue : cours de bourse ou crypto, avec la courbe de la séance.
 //   N;<nombre>;<noms>;<plat> : nouvelle commande sur PALais SIAM, annoncée 5 s
 //   par-dessus la vue en cours (aux couleurs du site), puis retour à la vue.
 //
@@ -105,7 +107,7 @@ const uint16_t COL_WHITE = c565(255, 255, 255);
 const uint16_t COL_BLACK = 0;
 
 // ---------------- Vues et luminosité ----------------
-enum View : uint8_t { VIEW_GAUGES, VIEW_BIG, VIEW_CLOCK, VIEW_ELEVEN, VIEW_PC, VIEW_POMODORO, VIEW_SIAM, VIEW_COUNT };
+enum View : uint8_t { VIEW_GAUGES, VIEW_BIG, VIEW_CLOCK, VIEW_ELEVEN, VIEW_PC, VIEW_POMODORO, VIEW_SIAM, VIEW_MARKET, VIEW_COUNT };
 
 // Pomodoro : 25 min de travail, 5 min de pause, en boucle. Démarre après 5 s passées
 // sur la vue, s'arrête dès qu'on la quitte. Tourne sur la carte seule, sans le PC.
@@ -136,6 +138,8 @@ State st;
 Eleven el;
 PcStats pc;
 SiamSummary sm;
+Market mk;
+#define MARKET_STALE_MS 600000UL  // sans relevé depuis 10 min : cours grisé
 #define PC_STALE_MS 15000UL  // sans trame P depuis 15 s : valeurs masquées
 
 static uint32_t nowLocal() {
@@ -437,6 +441,14 @@ static void drawFooter() {
     buf[0] = 0;  // le Pomodoro n'a pas besoin du PC
   } else if (view == VIEW_PC) {
     snprintf(buf, sizeof(buf), "Mise a jour toutes les 3 s");
+  } else if (view == VIEW_MARKET) {
+    if (mk.have && mk.updated) {
+      char t[8];
+      fmtClock(t, sizeof(t), mk.updated);
+      snprintf(buf, sizeof(buf), "%s - releve a %s", mk.open ? "Marche ouvert" : "Marche ferme", t);
+    } else {
+      buf[0] = 0;
+    }
   } else if (isStale()) {
     snprintf(buf, sizeof(buf), "PC deconnecte depuis %lu min", (unsigned long)((millis() - st.rxMs) / 60000));
     col = COL_WARN;
@@ -698,6 +710,7 @@ static Pomo pomoState() {
 }
 
 static void showToast(const char *msg);  // défini plus bas, avec le bouton
+static void fitText(char *s, size_t cap, int16_t maxW);
 
 static void drawPomodoroView() {
   char buf[40];
@@ -734,6 +747,70 @@ static void drawPomodoroView() {
     snprintf(buf, sizeof(buf), "cycle %lu", (unsigned long)p.cycle);
   }
   drawCenter(buf, W / 2, 152, col);
+}
+
+// ---------------- Vue 8 : bourse ----------------
+static void drawMarketView() {
+  char buf[48];
+  const bool ok = mk.have && millis() - mk.rxMs < MARKET_STALE_MS;
+  drawHeader(mk.have ? mk.symbol : "Bourse", mk.have ? (mk.open ? "en direct" : "ferme") : "");
+
+  if (!mk.have) {
+    setRole(F_SUB);
+    drawCenter("aucun cours", W / 2, 90, COL_GREY);
+    setRole(F_BODY);
+    drawCenter("MARKET_SYMBOL dans bridge/settings.env", W / 2, 116, COL_DIM);
+    return;
+  }
+
+  const uint16_t up = c565(34, 170, 90), down = c565(220, 60, 60);
+  const uint16_t trend = !ok ? COL_GREY : (mk.pct >= 0 ? up : down);
+
+  // Nom, puis cours en grand et variation
+  // Variation à droite, sur la ligne du nom : le cours garde toute la largeur
+  setRole(F_VALUE);
+  char pct[12];
+  snprintf(pct, sizeof(pct), "%+.2f%%", mk.pct);
+  drawRight(pct, W - MX, 52, trend);
+  const int16_t pctW = textWidth(pct);
+  setRole(F_BODY);
+  snprintf(buf, sizeof(buf), "%s", mk.name);
+  fitText(buf, sizeof(buf), W - 2 * MX - pctW - 10);
+  drawLeft(buf, MX, 50, COL_DIM);
+  setRole(F_BIG);
+  drawLeft(mk.price, MX, 94, ok ? COL_TEXT : COL_GREY);
+  const int16_t pw = textWidth(mk.price);
+  setRole(F_LABEL);
+  drawLeft(mk.currency, MX + pw + 6, 94, COL_DIM);
+
+  // Courbe de la séance, plus bas et plus haut à droite
+  if (mk.n >= 2) {
+    const int16_t gx = MX, gy = 104, gw = W - 2 * MX - 64, gh = 46;
+    canvas.drawFastHLine(gx, gy + gh, gw, COL_TRACK);
+    int16_t px = gx, py = gy + gh - mk.pts[0] * gh / 99;
+    for (uint8_t i = 1; i < mk.n; i++) {
+      const int16_t x = gx + (int32_t)i * (gw - 1) / (mk.n - 1);
+      const int16_t y = gy + gh - mk.pts[i] * gh / 99;
+      canvas.drawLine(px, py, x, y, trend);
+      canvas.drawLine(px, py + 1, x, y + 1, trend);  // trait de 2 px
+      px = x;
+      py = y;
+    }
+    fillCircleAA(px, py, 3, trend);
+    setRole(F_SMALL);
+    canvas.setTextColor(COL_DIM);
+    canvas.setCursor(W - MX - 56, gy + 2);
+    canvas.print("haut");
+    canvas.setCursor(W - MX - 56, gy + 12);
+    canvas.setTextColor(COL_TEXT);
+    canvas.print(mk.high);
+    canvas.setTextColor(COL_DIM);
+    canvas.setCursor(W - MX - 56, gy + gh - 18);
+    canvas.print("bas");
+    canvas.setTextColor(COL_TEXT);
+    canvas.setCursor(W - MX - 56, gy + gh - 8);
+    canvas.print(mk.low);
+  }
 }
 
 // ---------------- Annonce PALais SIAM ----------------
@@ -965,6 +1042,7 @@ static void render() {
     case VIEW_ELEVEN: drawElevenView(); break;
     case VIEW_PC: drawPcView(); break;
     case VIEW_POMODORO: drawPomodoroView(); break;
+    case VIEW_MARKET: drawMarketView(); break;
     default: drawGaugesView(); break;
   }
   drawFooter();
@@ -1134,6 +1212,38 @@ static void handleSummary(char *line) {
   sm.have = true;
 }
 
+// M;<symbole>;<nom>;<cours>;<variation%>;<devise>;<ouvert>;<releve>;<min>;<max>;<points>
+static void handleMarket(char *line) {
+  char *f[11];
+  int n = 0;
+  char *p = line;
+  while (n < 11) {
+    f[n++] = p;
+    char *sep = strchr(p, ';');
+    if (!sep) break;
+    *sep = 0;
+    p = sep + 1;
+  }
+  if (n < 10) return;
+  snprintf(mk.symbol, sizeof(mk.symbol), "%s", f[1]);
+  snprintf(mk.name, sizeof(mk.name), "%s", f[2]);
+  snprintf(mk.price, sizeof(mk.price), "%s", f[3]);
+  mk.pct = atof(f[4]);
+  snprintf(mk.currency, sizeof(mk.currency), "%s", f[5]);
+  mk.open = atoi(f[6]) == 1;
+  mk.updated = strtoul(f[7], NULL, 10);
+  snprintf(mk.low, sizeof(mk.low), "%s", f[8]);
+  snprintf(mk.high, sizeof(mk.high), "%s", f[9]);
+  mk.n = 0;
+  for (char *q = n > 10 ? f[10] : NULL; q && *q && mk.n < sizeof(mk.pts);) {
+    mk.pts[mk.n++] = (uint8_t)atoi(q);
+    q = strchr(q, ',');
+    if (q) q++;
+  }
+  mk.rxMs = millis();
+  mk.have = true;
+}
+
 static void handleLine(char *line) {
   if (line[0] == '?') {
     Serial.println("MINIDISPLAY claude_usage 1");
@@ -1150,6 +1260,10 @@ static void handleLine(char *line) {
     pc.cpu = v[0]; pc.ramUsed = v[1]; pc.ramTotal = v[2]; pc.gpu = v[3]; pc.gpuTemp = v[4];
     pc.rxMs = millis();
     pc.have = true;
+    return;
+  }
+  if (line[0] == 'M' && line[1] == ';') {
+    handleMarket(line);
     return;
   }
   if (line[0] == 'S' && line[1] == ';') {
@@ -1192,7 +1306,7 @@ static void handleLine(char *line) {
 }
 
 static void pollSerial() {
-  static char line[200];
+  static char line[400];
   static size_t len = 0;
   while (Serial.available()) {
     char c = Serial.read();

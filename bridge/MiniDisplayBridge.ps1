@@ -29,15 +29,18 @@
 #    S;<date>;<limite>;<ouvert>;<commandes>;<payees>;<devinettes>;<bonnes>;<total>;<derniers>
 #  <bonnes> vaut -1 tant que la solution n'est pas revelee.
 #
+#  Bourse (8e vue) : MARKET_SYMBOL dans bridge/settings.env (ticker Yahoo,
+#  ou BTC / ETH / SOL), cours releve chaque minute, sans cle :
+#    M;<symbole>;<nom>;<cours>;<variation%>;<devise>;<ouvert>;<releve>;<min>;<max>;<points>
+#  <points> : la seance (ou les dernieres 24 h en crypto), 0 a 99 entre min et max.
+#
 #  Parametres :
-#    -TestOrder   envoie une fausse commande a la carte, puis sortie
 #    -Port COM3   force le port (sinon detection par VID Espressif 303A)
 #    -Once        un seul envoi puis sortie (test)
 # =====================================================================
 param(
     [string]$Port,
-    [switch]$Once,
-    [switch]$TestOrder
+    [switch]$Once
 )
 
 $ErrorActionPreference = 'Stop'
@@ -57,6 +60,8 @@ $ElevenUrl     = 'https://api.elevenlabs.io/v1/user/subscription'
 $ElevenMinutes = 10
 $PcSeconds     = 3
 $OrderSeconds  = 20
+$MarketSeconds = 60
+$MarketPoints  = 60
 $SummarySeconds = 60
 $NvidiaSmi     = (Get-Command nvidia-smi -ErrorAction SilentlyContinue).Source
 
@@ -127,12 +132,13 @@ function Get-OauthToken {
 }
 
 function Get-Secret {
-    # Variable d'environnement, sinon ligne NOM=valeur de bridge/secrets.env
+    # Variable d'environnement, sinon ligne NOM=valeur de bridge/settings.env ou secrets.env
     param([string]$Name)
     $v = [Environment]::GetEnvironmentVariable($Name)
     if ($v) { return $v.Trim() }
-    $f = Join-Path $PSScriptRoot 'secrets.env'
-    if (Test-Path $f) {
+    foreach ($file in 'settings.env', 'secrets.env') {
+        $f = Join-Path $PSScriptRoot $file
+        if (-not (Test-Path $f)) { continue }
         foreach ($l in Get-Content -Path $f -Encoding UTF8) {
             if ($l -match "^\s*$Name\s*=\s*(.+?)\s*$") { return $Matches[1].Trim('"', "'") }
         }
@@ -155,6 +161,9 @@ $Siam = @{
 $SiamOn    = [bool]($Siam.Url -and $Siam.Key -and $Siam.Email -and $Siam.Password)
 $NextOrder = Get-Date
 $NextSummary  = Get-Date
+$MarketSymbol = Get-Secret 'MARKET_SYMBOL'
+$NextMarket   = Get-Date
+$MarketFrame  = $null
 $SummaryFrame = $null
 $Quota = @{ Five = -1; FiveReset = $null; Week = -1; WeekReset = $null; Updated = $null; Error = 'premier releve en cours'; Code = 0 }
 $Level = -1
@@ -348,6 +357,63 @@ function Send-Order {
     try { $script:Serial.WriteLine($f); Write-Log "-> $f" } catch { Close-Board }
 }
 
+# ---------------- Bourse ----------------
+# API de graphiques de Yahoo Finance, publique et sans cle. Les cryptos
+# s'ecrivent BTC-USD ; BTC, ETH et SOL seuls sont completes.
+function Update-Market {
+    $script:NextMarket = (Get-Date).AddSeconds($MarketSeconds)
+    $sym = $MarketSymbol.ToUpper()
+    if ($sym -in 'BTC', 'ETH', 'SOL') { $sym = "$sym-USD" }
+    $crypto = $sym -like '*-USD'
+    $url = "https://query1.finance.yahoo.com/v8/finance/chart/$sym`?range=1d&interval=5m"
+    $r = Invoke-Get -Url $url -Headers @{} -UA 'Mozilla/5.0'
+    if ($r.Code -ne 200 -or -not $r.Raw) { Write-Log "Bourse : $sym indisponible ($($r.Code))"; return }
+    try { $res = ($r.Raw | ConvertFrom-Json).chart.result[0] } catch { return }
+    if (-not $res) { return }
+    $m = $res.meta
+    $closes = @($res.indicators.quote[0].close | Where-Object { $null -ne $_ } | ForEach-Object { [double]$_ })
+    $price = [double]$m.regularMarketPrice
+    # Reference : cloture de la veille en bourse ; en crypto (24 h/24), debut de la journee
+    $ref = if ($crypto -and $closes.Count) { $closes[0] } else { [double]$m.chartPreviousClose }
+    $pct = if ($ref) { ($price - $ref) / $ref * 100 } else { 0 }
+    $nowUnix = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+    $p = $m.currentTradingPeriod.regular
+    $open = if ($crypto) { 1 } elseif ($nowUnix -ge [int64]$p.start -and $nowUnix -lt [int64]$p.end) { 1 } else { 0 }
+
+    # Courbe : au plus $MarketPoints points, ramenes entre 0 et 99
+    $pts = ''; $min = 0; $max = 0
+    if ($closes.Count -ge 2) {
+        $step = [math]::Max(1, [math]::Ceiling($closes.Count / $MarketPoints))
+        $sample = for ($i = 0; $i -lt $closes.Count; $i += $step) { $closes[$i] }
+        $sample = @($sample) + $price
+        $min = ($sample | Measure-Object -Minimum).Minimum
+        $max = ($sample | Measure-Object -Maximum).Maximum
+        $span = if ($max -gt $min) { $max - $min } else { 1 }
+        $pts = ($sample | ForEach-Object { [int][math]::Round(($_ - $min) / $span * 99) }) -join ','
+    }
+    $inv = [Globalization.CultureInfo]::InvariantCulture
+    $label = $MarketSymbol.ToUpper() -replace '-USD$', ''
+    $name = ([string]$m.shortName) -replace ' USD$', ''  # « Bitcoin USD » -> « Bitcoin »
+    $script:MarketFrame = 'M;{0};{1};{2};{3};{4};{5};{6};{7};{8};{9}' -f $label, (ConvertTo-Ascii $name),
+        (Format-Price $price), $pct.ToString('0.00', $inv), [string]$m.currency, $open,
+        (ConvertTo-LocalEpoch (Get-Date)), (Format-Price $min), (Format-Price $max), $pts
+    Send-Market
+}
+
+# 81501.52 -> « 81 502 » ; 13.21 -> « 13.21 »
+function Format-Price {
+    param([double]$V)
+    $inv = [Globalization.CultureInfo]::InvariantCulture
+    if ($V -ge 1000) { return $V.ToString('#,0', $inv).Replace(',', ' ') }
+    return $V.ToString('0.00', $inv)
+}
+
+function Send-Market {
+    if (-not $script:MarketFrame) { return }
+    if (-not $script:Serial -and -not (Open-Board)) { return }
+    try { $script:Serial.WriteLine($script:MarketFrame) } catch { Close-Board }
+}
+
 function Get-PcFrame {
     # Processeur et memoire par WMI (noms de classes non traduits, contrairement aux compteurs)
     $cpu = -1; $used = -1; $total = -1; $gpu = -1; $temp = -1
@@ -480,6 +546,7 @@ function Send-Frame {
             Write-Log "-> $ef"
         }
         if ($script:SummaryFrame) { $script:Serial.WriteLine($script:SummaryFrame) }
+        if ($script:MarketFrame) { $script:Serial.WriteLine($script:MarketFrame) }
         return $true
     } catch {
         Write-Log "Envoi impossible : $($_.Exception.Message)"
@@ -491,12 +558,9 @@ function Send-Frame {
 # ---------------- Boucle ----------------
 Write-Log 'MiniDisplay Bridge demarre'
 Write-Log $(if ($ElevenKey) { 'ElevenLabs : cle trouvee, suivi active' } else { 'ElevenLabs : pas de cle, suivi desactive' })
+Write-Log $(if ($MarketSymbol) { "Bourse : suivi de $MarketSymbol" } else { 'Bourse : pas de MARKET_SYMBOL, suivi desactive' })
 Write-Log $(if ($SiamOn) { 'PALais SIAM : compte trouve, suivi des commandes active' } else { 'PALais SIAM : pas de compte, suivi desactive' })
-if ($TestOrder) {
-    Send-Order -Count 1 -Names 'Camille' -Dish 'Poulet curry vert'
-    Close-Board
-    exit
-}
+
 $NextSend = Get-Date
 try {
     while ($true) {
@@ -515,6 +579,7 @@ try {
         }
         if ($SiamOn -and $now -ge $NextOrder) { Update-Orders }
         if ($SiamOn -and (Get-Date) -ge $NextSummary) { Update-Summary }
+        if ($MarketSymbol -and (Get-Date) -ge $NextMarket) { Update-Market }
         if ($now -ge $NextPc) { Send-Pc; $NextPc = (Get-Date).AddSeconds($PcSeconds) }
         if ($changed -or $now -ge $NextSend) {
             $ok = Send-Frame

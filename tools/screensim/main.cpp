@@ -33,6 +33,10 @@ int main(int argc, char **argv) {
   sm.have = true; sm.date = 1792713600; sm.deadline = 1792749600; sm.open = true;  // vendredi 23 octobre, 10:00
   sm.orders = 12; sm.paid = 9; sm.guesses = 7; sm.correct = -1; sm.total = 317;
   snprintf(sm.recent, sizeof(sm.recent), "Camille, Lucas, Sam");
+  {
+    char m[] = "M;IART;Integra LifeSciences;13.21;-2.37;USD;0;1792247400;13.11;13.81;99,93,95,93,86,90,85,85,85,85,74,78,62,55,53,45,43,41,31,33,31,24,17,14,18,17,6,0,1,0,22,16,12,13,12,21,15,12,9,14,14";
+    handleMarket(m);
+  }
   pomoEnter = g_millis - POMO_ARM_MS - (6 * 60 + 36) * 1000UL;  // Pomodoro : 18:24 restantes
   for (uint8_t t = 0; t < THEME_COUNT; t++) {
     T = &THEMES[t];
