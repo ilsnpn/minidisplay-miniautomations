@@ -1,6 +1,6 @@
 # screensim
 
-Rend les écrans du firmware en images pour le site, **au pixel près** : c'est le vrai `firmware/claude_usage/claude_usage.ino` qui dessine, compilé sur PC.
+Rend les écrans du firmware en images pour le site, **au pixel près** : c'est le vrai `firmware/mdma_autonome/mdma_autonome.ino` (V2) qui dessine, compilé sur PC.
 
 ```sh
 python tools/screensim/render.py

@@ -1,7 +1,19 @@
-// Banc d'essai PC : compile le vrai firmware et écrit chaque écran (thème x vue) en PPM.
+// Banc d'essai PC : compile le vrai firmware (V2, mdma_autonome.ino sans reseau.ino)
+// et écrit chaque écran (thème x vue) en PPM. Données de démonstration fictives.
 #include "Arduino.h"
-uint32_t g_millis = 1000000;
-#include "claude_usage.ino"
+uint32_t g_millis = 100000000;
+
+// Heure simulée : samedi 17 octobre 2026, 14:32 (déjà locale, voir stub/Arduino.h)
+static time_t sim_time(time_t *t) {
+  const time_t v = 1792247520;
+  if (t) *t = v;
+  return v;
+}
+#define time(x) sim_time(x)
+
+#include "mdma_autonome.ino"
+
+void netSetup() {}  // la tâche réseau n'existe pas dans le banc d'essai
 
 static void dump(const char *path) {
   FILE *f = fopen(path, "wb");
@@ -17,26 +29,47 @@ static void dump(const char *path) {
 
 int main(int argc, char **argv) {
   const char *out = argc > 1 ? argv[1] : ".";
+  const uint32_t now = nowLocal();
   st.have = true;
-  st.pcNow = 1792247520;  // samedi 17 octobre 2026, 14:32
-  st.rxMs = g_millis;
   st.five = { 47, 1792256580 };
   st.week = { 29, 1792692000 };
   st.level = 0;
-  st.updated = st.pcNow - 60;
+  st.updated = now - 60;
   el.have = true;
   el.used = 18135;
   el.limit = 37472;
   el.reset = 1793865876;
-  el.updated = st.pcNow - 120;
-  pc.have = true; pc.rxMs = g_millis; pc.cpu = 23; pc.ramUsed = 18630; pc.ramTotal = 31850; pc.gpu = 64; pc.gpuTemp = 71;
+  el.updated = now - 120;
   sm.have = true; sm.date = 1792713600; sm.deadline = 1792749600; sm.open = true;  // vendredi 23 octobre, 10:00
   sm.orders = 12; sm.paid = 9; sm.guesses = 7; sm.correct = -1; sm.total = 317;
   snprintf(sm.recent, sizeof(sm.recent), "Camille, Lucas, Sam");
-  {
-    char m[] = "M;IART;Integra LifeSciences;13.21;-2.37;USD;0;1792247400;13.11;13.81;99,93,95,93,86,90,85,85,85,85,74,78,62,55,53,45,43,41,31,33,31,24,17,14,18,17,6,0,1,0,22,16,12,13,12,21,15,12,9,14,14";
-    handleMarket(m);
-  }
+
+  // Bourse : IART, séance terminée
+  snprintf(mk.symbol, sizeof(mk.symbol), "IART");
+  snprintf(mk.name, sizeof(mk.name), "Integra LifeSciences");
+  snprintf(mk.price, sizeof(mk.price), "13.21");
+  mk.pct = -2.37f;
+  snprintf(mk.currency, sizeof(mk.currency), "USD");
+  mk.open = false;
+  mk.updated = now - 120;
+  snprintf(mk.low, sizeof(mk.low), "13.11");
+  snprintf(mk.high, sizeof(mk.high), "13.81");
+  static const uint8_t PTS[] = { 99, 93, 95, 93, 86, 90, 85, 85, 85, 85, 74, 78, 62, 55, 53, 45, 43, 41, 31, 33, 31,
+                                 24, 17, 14, 18, 17, 6, 0, 1, 0, 22, 16, 12, 13, 12, 21, 15, 12, 9, 14, 14 };
+  mk.n = sizeof(PTS);
+  memcpy(mk.pts, PTS, sizeof(PTS));
+  mk.rxMs = g_millis;
+  mk.have = true;
+
+  // Réseau : partage de connexion du téléphone (noms fictifs de secrets.h.example)
+  net.up = true;
+  net.current = 0;
+  net.forced = -1;
+  net.rssi = -58;
+  snprintf(net.ip, sizeof(net.ip), "172.20.10.4");
+  net.upSinceMs = g_millis - (2 * 3600 + 14 * 60) * 1000UL;
+  for (uint8_t i = 0; i < SRC_COUNT; i++) srcs[i] = { true, now - 60, false };
+
   pomoEnter = g_millis - POMO_ARM_MS - (6 * 60 + 36) * 1000UL;  // Pomodoro : 18:24 restantes
   for (uint8_t t = 0; t < THEME_COUNT; t++) {
     T = &THEMES[t];
@@ -48,15 +81,23 @@ int main(int argc, char **argv) {
       dump(p);
     }
   }
-  // Annonce d'une commande PALais SIAM, 1,5 s après réception
+  char p[512];
+  // Menu de la vue Réseau, sélection sur « Automatique »
   T = &THEMES[THEME_DEFAULT];
+  view = VIEW_NET;
+  menuOpen = true;
+  menuSel = MENU_AUTO;
+  render();
+  snprintf(p, sizeof(p), "%s/menu.ppm", out);
+  dump(p);
+  menuOpen = false;
+  // Annonce d'une commande PALais SIAM, 1,5 s après réception
   orderCount = 1;
   snprintf(orderNames, sizeof(orderNames), "Camille");
   snprintf(orderDish, sizeof(orderDish), "Poulet curry vert");
   orderStart = g_millis - 1500;
   orderUntil = orderStart + ORDER_MS;
   render();
-  char p[512];
   snprintf(p, sizeof(p), "%s/order.ppm", out);
   dump(p);
   // Vue PALais SIAM, cuisine fermée

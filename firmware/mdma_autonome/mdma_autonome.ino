@@ -33,7 +33,12 @@
 #include <Fonts/FreeSansBold12pt7b.h>
 #include <Fonts/FreeSansBold24pt7b.h>
 #include "state.h"
-#include "secrets.h"  // copie locale de secrets.h.example, ignorée par Git
+// Copie locale de secrets.h.example, ignorée par Git. Le banc d'essai du site
+// (tools/screensim) lit le modèle à la place, pour ne jamais afficher de vrais réseaux.
+#ifndef MDMA_SECRETS
+#define MDMA_SECRETS "secrets.h"
+#endif
+#include MDMA_SECRETS
 
 // Brochage (voir docs/HARDWARE.md)
 #define PIN_MOSI 6

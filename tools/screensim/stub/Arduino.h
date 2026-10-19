@@ -26,11 +26,24 @@ inline void ledcWrite(int, int) {}
 #ifndef min
 #define min(a,b) ((a)<(b)?(a):(b))
 #endif
+#ifndef max
+#define max(a,b) ((a)>(b)?(a):(b))
+#endif
 class __FlashStringHelper;
 struct String { const char *c_str() const { return ""; } unsigned length() const { return 0; } };
 #define radians(d) ((d) * PI / 180.0f)
 #include <time.h>
 inline struct tm *gmtime_r(const time_t *t, struct tm *r) { gmtime_s(r, t); return r; }
+// Banc d'essai : l'heure simulée est déjà locale, localtime = gmtime
+inline struct tm *localtime_r(const time_t *t, struct tm *r) { return gmtime_r(t, r); }
+// FreeRTOS : une seule tâche dans le banc d'essai, le verrou ne fait rien
+typedef void *SemaphoreHandle_t;
+#define portMAX_DELAY 0
+inline SemaphoreHandle_t xSemaphoreCreateRecursiveMutex() { return nullptr; }
+inline int xSemaphoreTakeRecursive(SemaphoreHandle_t, int) { return 1; }
+inline int xSemaphoreGiveRecursive(SemaphoreHandle_t) { return 1; }
+struct EspStub { void restart() {} };
+static EspStub ESP;
 #include "Print.h"
 struct SerialStub { void begin(int) {} int available() { return 0; } int read() { return -1; } void println(const char *) {} };
 static SerialStub Serial;
