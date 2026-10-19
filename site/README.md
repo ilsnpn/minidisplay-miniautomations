@@ -13,7 +13,8 @@ Public visé : toute personne qui veut comprendre, réexpliquer ou refaire le pr
 | `pont.html` | le pont PowerShell : jeton, API, rate-limit, heures, protocole série, détection USB |
 | `firmware.html` | le firmware : écran, rendu hors écran, réception, horloge, calcul des jauges, pièges |
 | `materiel.html` | la carte : bus SPI, GPIO, strapping, USB natif, alimentation |
-| `guide.html` | refaire le projet pas à pas depuis un PC vierge |
+| `guide.html` | refaire le projet pas à pas depuis un PC vierge (V1) |
+| `autonome.html` | la V2 : Wi-Fi, tâche réseau, jeton Claude dédié, vue Réseau et menu, pièges |
 | `boitiers.html` | acheter la carte, boîtiers imprimés en 3D, fichiers CAO |
 
 ## Fichiers

@@ -18,3 +18,9 @@ bridge/secrets.env
 # Notes privées : roadmap et photos personnelles (non publiées)
 ROADMAP.md
 Retour visuel/
+
+# MDMA autonome : réglages et secrets de la carte (voir secrets.h.example)
+firmware/mdma_autonome/secrets.h
+
+# Archive de la V1 (pont USB)
+MDMA-v1-usb.zip

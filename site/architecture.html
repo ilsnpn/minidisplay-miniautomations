@@ -31,6 +31,7 @@
           <a href="firmware.html"><span>3</span>Le firmware</a>
           <a href="materiel.html"><span>4</span>La carte</a>
           <a href="guide.html"><span>5</span>Guide pas à pas</a>
+          <a href="autonome.html"><span>6</span>Version 2 autonome</a>
         </div>
       </div>
       <a href="boitiers.html">Boîtiers</a>
@@ -41,7 +42,7 @@
 
 <header class="doc-hero">
   <div class="wrap">
-    <span class="kicker">Comprendre · 1 / 5</span>
+    <span class="kicker">Comprendre · 1 / 6</span>
     <h1>Architecture : du serveur de Claude à l'écran</h1>
     <p class="lead">Ce que fait chaque maillon, comment circulent les données, à quel rythme, et pourquoi la carte ne se connecte à aucun réseau.</p>
     <div class="doc-meta"><span>Lecture : 8 min</span><span>Niveau : débutant</span><span>Mis à jour le 17/10/2026</span></div>
@@ -62,6 +63,11 @@
   </aside>
 
   <article class="prose">
+
+    <div class="callout info">
+      <b>Deux versions</b>
+      <p>Cette page décrit la <strong>V1</strong> : le PC fait le travail réseau et parle à la carte par USB. La <strong>V2</strong> s'en passe : la carte se connecte en Wi-Fi et relève tout elle-même, pour les postes dont les ports USB sont bloqués. → <a href="autonome.html">Version 2 autonome</a></p>
+    </div>
 
     <section id="probleme">
       <h2><span class="n">01</span>Le besoin</h2>
@@ -171,6 +177,7 @@
         <b>Principe de conception</b>
         <p>La carte est volontairement « bête » : elle ne possède aucun secret, ne parle à aucun serveur et ne fait que de l'affichage. Toute l'intelligence réseau reste sur le PC, plus facile à mettre à jour.</p>
       </div>
+      <p>Ce choix suppose que le PC accepte les périphériques USB. Quand ce n'est pas le cas, la <a href="autonome.html">V2</a> reprend les contraintes du tableau une à une : un partage de connexion de téléphone au lieu du réseau de l'entreprise, une connexion Claude réservée à la carte qui se renouvelle seule, et HTTPS avec certificats vérifiés.</p>
     </section>
 
     <section id="roles">
@@ -271,9 +278,13 @@ sequenceDiagram
   bridge.log                   <i># journal</i>
 <b>firmware/</b>                     <i># côté carte (Arduino)</i>
   hello_world/                 <i># premier test de l'écran</i>
-  claude_usage/                <i># le firmware du projet</i>
+  claude_usage/                <i># V1 : le firmware relié au pont</i>
     claude_usage.ino
     state.h
+  mdma_autonome/               <i># V2 : la carte autonome en Wi-Fi</i>
+    mdma_autonome.ino          <i># affichage, bouton, menu</i>
+    reseau.ino                 <i># Wi-Fi, jetons, relevés</i>
+    secrets.h.example          <i># modèle des réglages et secrets</i>
 <b>site/</b>                         <i># ce site</i>
 <b>docs/</b>                         <i># fiche matériel + photos fabricant</i>
 <b>ClaudeStatus/</b>                 <i># widget PC d'origine (référence)</i>

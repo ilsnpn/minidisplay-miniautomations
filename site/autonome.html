@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="color-scheme" content="dark light">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MDMA - Version 2 autonome</title>
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <meta name="description" content="MDMA version 2 : la carte se passe du PC, se connecte en Wi-Fi et relève elle-même le quota Claude, en renouvelant seule son jeton.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+  <link rel="stylesheet" href="style.css">
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="docs.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap">
+    <a class="brand" href="index.html" title="MDMA : MiniDisplay MiniAutomations"><span class="brand-mark" aria-hidden="true"></span>MDMA</a>
+    <div class="nav-links">
+      <div class="nav-drop">
+        <button type="button" class="on" aria-haspopup="true">Documentation</button>
+        <div class="nav-menu">
+          <a href="architecture.html"><span>1</span>Architecture</a>
+          <a href="pont.html"><span>2</span>Le pont PC</a>
+          <a href="firmware.html"><span>3</span>Le firmware</a>
+          <a href="materiel.html"><span>4</span>La carte</a>
+          <a href="guide.html"><span>5</span>Guide pas à pas</a>
+          <a href="autonome.html" aria-current="page"><span>6</span>Version 2 autonome</a>
+        </div>
+      </div>
+      <a href="boitiers.html">Boîtiers</a>
+      <a href="https://github.com/ilsnpn/minidisplay-miniautomations" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="doc-hero">
+  <div class="wrap">
+    <span class="kicker">Comprendre · 6 / 6</span>
+    <h1>Version 2 : la carte se passe du PC</h1>
+    <p class="lead">Plus de câble de données ni de pont : la carte se connecte en Wi-Fi, relève elle-même le quota Claude et renouvelle seule son jeton.</p>
+    <div class="doc-meta"><span>Lecture : 12 min</span><span>Niveau : avancé</span><span>Mis à jour le 19/10/2026</span></div>
+  </div>
+</header>
+
+<div class="wrap doc-layout">
+  <aside class="toc">
+    <div class="cap">Sur cette page</div>
+    <a href="#pourquoi">Pourquoi une V2</a>
+    <a href="#comparaison">V1 et V2 côte à côte</a>
+    <a href="#chaine">La nouvelle chaîne</a>
+    <a href="#tache">La tâche réseau</a>
+    <a href="#jeton">Le jeton Claude</a>
+    <a href="#wifi">Wi-Fi, vue Réseau et menu</a>
+    <a href="#https">HTTPS et JSON</a>
+    <a href="#heure">L'heure</a>
+    <a href="#installer">Mise en place</a>
+    <a href="#pieges">Pièges rencontrés</a>
+    <a href="#securite">Sécurité</a>
+  </aside>
+
+  <article class="prose">
+
+    <section id="pourquoi">
+      <h2><span class="n">01</span>Pourquoi une V2</h2>
+      <p>La V1 repose sur un câble USB entre le PC et la carte (voir <a href="architecture.html">l'architecture</a>). Elle fonctionne très bien… tant que le PC accepte les périphériques USB. Sur un poste d'entreprise, les ports USB sont souvent <strong>bloqués</strong> : la carte reçoit du courant, mais aucune donnée.</p>
+      <p>La V2 inverse donc le principe de la V1 : la carte devient autonome. Elle se connecte en Wi-Fi, appelle elle-même les API, et l'USB ne sert plus qu'à l'alimenter.</p>
+      <div class="callout key">
+        <b>Le réseau de l'entreprise reste intouché</b>
+        <p>La carte se connecte au <strong>partage de connexion d'un téléphone</strong>, pas au Wi-Fi du bureau. Elle passe par la 4G/5G personnelle et n'apparaît jamais sur le réseau de l'entreprise. Par prudence, on l'alimente avec un chargeur USB plutôt qu'avec le PC : un périphérique série refusé peut générer une alerte de sécurité.</p>
+      </div>
+      <p>La V1 reste disponible : elle est marquée par le repère Git <code>v1-usb</code> et son code est toujours dans <code>bridge/</code> et <code>firmware/claude_usage/</code>.</p>
+    </section>
+
+    <section id="comparaison">
+      <h2><span class="n">02</span>V1 et V2 côte à côte</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th></th><th>V1 · pont USB</th><th>V2 · autonome</th></tr></thead>
+          <tbody>
+            <tr><td>Qui appelle les API</td><td>Le PC (script PowerShell)</td><td>La carte</td></tr>
+            <tr><td>Liaison</td><td>USB série, une trame toutes les 30 s</td><td>Wi-Fi, plusieurs réseaux possibles</td></tr>
+            <tr><td>PC nécessaire</td><td>Oui, allumé avec le pont lancé</td><td><strong>Non</strong>, un simple chargeur suffit</td></tr>
+            <tr><td>Jeton Claude</td><td>Celui de Claude Code sur le PC</td><td>Une connexion réservée à la carte, renouvelée par elle</td></tr>
+            <tr><td>Secrets</td><td>Restent sur le PC</td><td>Stockés dans la Flash de la carte</td></tr>
+            <tr><td>Heure</td><td>Envoyée par le PC</td><td>Internet (NTP), heure d'été comprise</td></tr>
+            <tr><td>5ᵉ vue</td><td>Ressources du PC (CPU, RAM, GPU)</td><td>Réseau : signal Wi-Fi et état des sources</td></tr>
+            <tr><td>Changer un réglage</td><td>Éditer un fichier sur le PC</td><td>Éditer <code>secrets.h</code> et reflasher</td></tr>
+            <tr><td>Firmware</td><td><code>firmware/claude_usage/</code></td><td><code>firmware/mdma_autonome/</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Tout l'affichage est commun : thèmes, jauges, horloge, Pomodoro, bourse, couleurs. Seule la manière d'obtenir les données change, ce qui a permis de reprendre le firmware de la V1 presque tel quel.</p>
+    </section>
+
+    <section id="chaine">
+      <h2><span class="n">03</span>La nouvelle chaîne</h2>
+      <figure class="diagram">
+        <svg viewBox="0 0 960 300" role="img" aria-label="Schéma : services sur Internet, téléphone en partage de connexion, carte ESP32-C6, écran, chargeur USB">
+          <defs>
+            <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="d-arrow"/></marker>
+            <marker id="ara" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="d-arrow-acc"/></marker>
+          </defs>
+          <rect x="8" y="22" width="262" height="262" rx="16" class="d-dash"/>
+          <text x="24" y="44" class="d-mono">INTERNET</text>
+          <rect x="300" y="22" width="652" height="262" rx="16" class="d-dash"/>
+          <text x="316" y="44" class="d-mono">VOTRE BUREAU · aucun lien avec le PC</text>
+
+          <rect x="24" y="64" width="230" height="200" rx="12" class="d-box"/>
+          <text x="40" y="92" class="d-title">Services</text>
+          <text x="40" y="118" class="d-mono">api.anthropic.com</text>
+          <text x="40" y="138" class="d-mono">platform.claude.com</text>
+          <text x="40" y="158" class="d-mono">status.claude.com</text>
+          <text x="40" y="178" class="d-mono">api.elevenlabs.io</text>
+          <text x="40" y="198" class="d-mono">finance.yahoo.com</text>
+          <text x="40" y="218" class="d-mono">pool.ntp.org</text>
+          <text x="40" y="246" class="d-text">tout en HTTPS vérifié</text>
+
+          <rect x="330" y="90" width="170" height="110" rx="12" class="d-box-2"/>
+          <text x="346" y="120" class="d-title">Téléphone</text>
+          <text x="346" y="144" class="d-text">partage de connexion</text>
+          <text x="346" y="164" class="d-mono">4G / 5G · 2,4 GHz</text>
+
+          <rect x="580" y="70" width="210" height="150" rx="12" class="d-acc"/>
+          <text x="596" y="100" class="d-title">ESP32-C6</text>
+          <text x="596" y="124" class="d-mono-acc">mdma_autonome</text>
+          <text x="596" y="148" class="d-text">tâche réseau : Wi-Fi,</text>
+          <text x="596" y="168" class="d-text">jetons, relevés</text>
+          <text x="596" y="196" class="d-text">loop() : écran, bouton</text>
+
+          <rect x="822" y="70" width="116" height="150" rx="12" class="d-box"/>
+          <text x="838" y="100" class="d-title">Écran</text>
+          <text x="838" y="124" class="d-mono">320×172</text>
+          <text x="838" y="148" class="d-text">+ LED RGB</text>
+
+          <path d="M326 145 L258 145" class="d-line" marker-end="url(#ar)"/>
+          <path d="M576 145 L504 145" class="d-line-acc" marker-end="url(#ara)"/>
+          <text x="512" y="136" class="d-mono-acc" style="font-size:10.5px">Wi-Fi</text>
+          <path d="M792 145 L818 145" class="d-line" marker-end="url(#ar)"/>
+          <text x="596" y="262" class="d-text">alimentée par un chargeur USB</text>
+        </svg>
+        <figcaption>La carte fait désormais tout le travail réseau. Le téléphone ne sert que de point d'accès.</figcaption>
+      </figure>
+      <p>Le firmware tient en deux fichiers principaux. <code>mdma_autonome.ino</code> contient l'affichage repris de la V1, le bouton et le menu. <code>reseau.ino</code> contient tout ce qui touche au réseau.</p>
+    </section>
+
+    <section id="tache">
+      <h2><span class="n">04</span>La tâche réseau</h2>
+      <p>Une connexion HTTPS prend 1 à 3 secondes sur l'ESP32-C6, l'essentiel pour la poignée de main TLS. Si <code>loop()</code> faisait ces appels, l'écran et le bouton seraient figés pendant ce temps. Le réseau tourne donc dans une <strong>tâche FreeRTOS séparée</strong>, de même priorité que <code>loop()</code> : le processeur, qui n'a qu'un cœur, alterne entre les deux.</p>
+      <div class="code">
+        <div class="code-head"><span class="file">reseau.ino · la boucle de la tâche</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-cpp">// Un relevé par passage au plus : un choix fait dans le menu est pris en compte vite
+static void fetchOne() {
+  if (due(nextStatus)) fetchStatus();
+  else if (srcs[SRC_CLAUDE].on &amp;&amp; due(nextQuota)) fetchQuota();
+  else if (srcs[SRC_ELEVEN].on &amp;&amp; due(nextEleven)) fetchEleven();
+  // ...
+  else if (srcs[SRC_MARKET].on &amp;&amp; due(nextMarket)) fetchMarket();
+}
+
+static void netTask(void *) {
+  for (;;) {
+    wifiTick();
+    if (net.up &amp;&amp; timeOk() &amp;&amp; !sleeping) fetchOne();
+    vTaskDelay(pdMS_TO_TICKS(250));
+  }
+}</code></pre>
+      </div>
+      <p>Les deux tâches partagent les mêmes données (quota, cours, état du Wi-Fi). Pour éviter que l'écran se dessine pendant qu'une valeur est à moitié écrite, chaque accès passe par un <strong>verrou récursif</strong>. Le relevé se fait sans le verrou, et seule la copie du résultat le prend, ce qui ne dure que quelques microsecondes :</p>
+      <div class="code">
+        <div class="code-head"><span class="file">mdma_autonome.ino · le verrou</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-cpp">static SemaphoreHandle_t gLock;      // verrou récursif partagé avec la tâche réseau
+static volatile bool dirty = false;  // nouvelles données : à redessiner
+struct Guard {
+  Guard() { xSemaphoreTakeRecursive(gLock, portMAX_DELAY); }
+  ~Guard() { xSemaphoreGiveRecursive(gLock); }
+};</code></pre>
+      </div>
+      <p>Les rythmes sont ceux du pont de la V1, garde-fous compris :</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Source</th><th>Adresse</th><th>Rythme</th></tr></thead>
+          <tbody>
+            <tr><td>Quota Claude</td><td><code>api.anthropic.com/api/oauth/usage</code></td><td>5 min, puis 10, 20, 40 et 60 min après des refus 429</td></tr>
+            <tr><td>État des services</td><td><code>status.claude.com/api/v2/status.json</code></td><td>5 min</td></tr>
+            <tr><td>ElevenLabs</td><td><code>api.elevenlabs.io/v1/user/subscription</code></td><td>10 min</td></tr>
+            <tr><td>Bourse</td><td><code>query1.finance.yahoo.com/v8/finance/chart</code></td><td>1 min</td></tr>
+            <tr><td>Heure</td><td>NTP</td><td>au démarrage, puis toutes les heures</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="jeton">
+      <h2><span class="n">05</span>Le jeton Claude</h2>
+      <p>C'est le point le plus délicat de la V2. La page de quota exige un jeton OAuth d'abonnement Claude, avec le droit <code>user:profile</code>. Les pistes testées :</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Piste</th><th>Résultat</th></tr></thead>
+          <tbody>
+            <tr><td>Clé API (<code>sk-ant-api…</code>)</td><td>Hors sujet : elle dépend d'un compte de facturation à l'usage, qui n'a pas de fenêtres de 5 h ni de semaine</td></tr>
+            <tr><td>Jeton du PC, recopié tel quel</td><td>Expire au bout de quelques heures</td></tr>
+            <tr><td><code>claude setup-token</code> (valable un an)</td><td>Refusé (403) : il n'a que le droit <code>user:inference</code></td></tr>
+            <tr><td><strong>Connexion réservée à la carte</strong></td><td>✔ retenue</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Le principe : on se connecte à Claude Code une fois de plus, dans un dossier de configuration séparé, et on confie cette connexion à la carte. Elle reçoit un <strong>jeton d'accès</strong>, valable environ 8 h, et un <strong>jeton de renouvellement</strong>. Quand le jeton d'accès arrive à expiration, la carte en demande un nouveau, exactement comme le fait Claude Code.</p>
+      <div class="callout warn">
+        <b>Le jeton de renouvellement change à chaque usage</b>
+        <p>Chaque renouvellement renvoie un nouveau jeton de renouvellement et invalide l'ancien. Deux conséquences. Une seule machine doit utiliser une connexion donnée, sinon elles se déconnectent l'une l'autre : d'où une connexion séparée de celle du PC. Et la carte doit écrire le nouveau jeton en Flash <strong>immédiatement</strong>, sinon un redémarrage la ramènerait à un jeton déjà mort.</p>
+      </div>
+      <div class="code">
+        <div class="code-head"><span class="file">reseau.ino · renouvellement</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-cpp">const int code = httpJson(HOSTS[h], body.c_str(), NULL, CLAUDE_UA, doc, NULL, NULL);
+const char *at = doc["access_token"];
+if (code == 200 &amp;&amp; at) {
+  claudeAccess = at;
+  if (doc["refresh_token"].is&lt;const char *&gt;()) claudeRefresh = doc["refresh_token"].as&lt;const char *&gt;();
+  claudeExpires = time(NULL) + (doc["expires_in"] | 3600);
+  // L'ancien jeton de renouvellement ne vaut déjà plus rien : le nouveau est écrit tout de suite
+  netPrefs.putString("rt", claudeRefresh);
+  netPrefs.putString("at", claudeAccess);
+  netPrefs.putUInt("exp", claudeExpires);
+  return true;
+}</code></pre>
+      </div>
+      <p>Le jeton inscrit dans <code>secrets.h</code> ne sert donc qu'au premier démarrage. Pour savoir s'il a changé, la carte garde en Flash une empreinte (CRC32) du dernier jeton lu dans <code>secrets.h</code>. Si l'empreinte diffère, c'est qu'un nouveau jeton a été fourni : il remplace celui de la Flash. Sinon, la carte garde le dernier jeton qu'elle a obtenu elle-même. Reflasher le firmware sans toucher au jeton ne casse donc rien.</p>
+      <p>Le renouvellement a lieu 10 minutes avant l'expiration, ou aussitôt si l'API répond 401. Si le serveur répond <code>invalid_grant</code>, la connexion est perdue pour de bon : l'écran affiche « Claude : reconnexion necessaire » et la carte cesse d'insister.</p>
+    </section>
+
+    <section id="wifi">
+      <h2><span class="n">06</span>Wi-Fi, vue Réseau et menu</h2>
+      <p>Plusieurs réseaux sont déclarés dans <code>secrets.h</code>, par exemple le partage de connexion du téléphone puis la box de la maison. Il y a deux modes :</p>
+      <ul>
+        <li><strong>Automatique</strong> : la carte essaie les réseaux dans l'ordre, 15 s chacun, et passe au suivant plus tôt si le mot de passe est refusé ou le réseau absent. Après une coupure, elle repart du premier.</li>
+        <li><strong>Imposé</strong> : un réseau choisi dans le menu, mémorisé en Flash. S'il reste introuvable pendant une minute, la carte repasse en automatique, pour ne jamais rester bloquée hors ligne.</li>
+      </ul>
+      <p>La 5ᵉ vue, <strong>Réseau</strong>, remplace celle des ressources du PC. Elle affiche des barres de signal façon téléphone, la puissance en dBm, l'adresse IP, la durée de connexion et une pastille par source de données :</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Pastille</th><th>Signification</th></tr></thead>
+          <tbody>
+            <tr><td>Verte</td><td>Dernier relevé réussi</td></tr>
+            <tr><td>Orange</td><td>Le dernier essai a échoué</td></tr>
+            <tr><td>Grise</td><td>Pas encore de relevé</td></tr>
+            <tr><td>Cercle vide</td><td>Source non configurée dans <code>secrets.h</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Avec un seul bouton, le menu fonctionne à l'appui maintenu. Sur la vue Réseau, un appui long ouvre le menu, et la sélection descend d'une ligne toutes les 1,2 s tant qu'on reste appuyé. <strong>Relâcher valide la ligne surlignée.</strong> La première ligne est « Annuler », pour qu'un appui trop court ne déclenche rien. Les lignes suivantes : chaque réseau, Automatique, Redémarrer et Veille.</p>
+      <p>Sur les autres vues, l'appui long change toujours de thème, comme dans la V1.</p>
+      <div class="callout info">
+        <b>Veille plutôt qu'arrêt</b>
+        <p>La carte est alimentée par l'USB : le firmware ne peut pas la couper. La veille éteint l'écran, la LED et le Wi-Fi, et un appui la réveille. Une veille profonde est impossible ici, car le bouton BOOT (GPIO9) n'est pas une broche capable de réveiller la puce depuis ce mode.</p>
+      </div>
+    </section>
+
+    <section id="https">
+      <h2><span class="n">07</span>HTTPS et JSON</h2>
+      <p>Toutes les requêtes passent par une seule fonction, <code>httpJson</code>, qui repose sur trois choix :</p>
+      <ul>
+        <li><strong>Certificats vérifiés</strong> : <code>useBuiltinCACertBundle()</code> utilise les autorités de certification intégrées au cœur ESP32 3.x. Pas de <code>setInsecure()</code> : les jetons ne partent que vers le bon serveur.</li>
+        <li><strong>HTTP/1.0</strong> : le serveur ne peut alors pas répondre en « chunked ». La réponse se lit d'une traite comme un flux, sans la stocker entière en mémoire.</li>
+        <li><strong>Filtre ArduinoJson</strong> : seuls les champs utiles sont gardés. La courbe de bourse fait près de 40 Ko en JSON, mais seuls quelques centaines d'octets restent en mémoire.</li>
+      </ul>
+      <div class="code">
+        <div class="code-head"><span class="file">reseau.ino · httpJson</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-cpp">NetworkClientSecure client;
+client.useBuiltinCACertBundle();  // certificats vérifiés avec les autorités usuelles
+HTTPClient http;
+http.useHTTP10(true);  // pas de réponse « chunked » : elle se lit en flux
+http.begin(client, url);
+...
+int code = body ? http.POST((uint8_t *)body, strlen(body)) : http.GET();
+deserializeJson(doc, http.getStream(), DeserializationOption::Filter(*filter));</code></pre>
+      </div>
+    </section>
+
+    <section id="heure">
+      <h2><span class="n">08</span>L'heure</h2>
+      <p>Dans la V1, le PC envoyait l'heure locale toute prête. La V2 la règle par internet (NTP) dès que le Wi-Fi est connecté, avec un fuseau POSIX qui gère seul l'heure d'été :</p>
+      <div class="code">
+        <div class="code-head"><span class="file">secrets.h</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-cpp">#define TZ_INFO "CET-1CEST,M3.5.0,M10.5.0/3"  // Paris</code></pre>
+      </div>
+      <p>Pour ne rien changer au code d'affichage, la fonction <code>localEpoch()</code> convertit chaque heure UTC dans le même format que la V1 : des secondes depuis 1970 en « heure locale à plat », que l'écran lit avec <code>gmtime</code>. Les heures ISO des API (<code>2026-10-19T23:39:59.57+00:00</code>) sont analysées puis arrondies à la minute.</p>
+    </section>
+
+    <section id="installer">
+      <h2><span class="n">09</span>Mise en place</h2>
+      <ol>
+        <li><strong>Copier le modèle</strong> : <code>firmware/mdma_autonome/secrets.h.example</code> vers <code>secrets.h</code>. Ce fichier est ignoré par Git.</li>
+        <li><strong>Déclarer les réseaux Wi-Fi</strong> (2,4 GHz). Sur iPhone, activez « Maximiser la compatibilité » dans le partage de connexion.</li>
+        <li><strong>Créer la connexion Claude de la carte</strong>, puis copier le champ <code>refreshToken</code> de <code>%USERPROFILE%\.claude-mdma\.credentials.json</code> dans <code>CLAUDE_REFRESH_TOKEN</code>. Ne relancez plus jamais Claude Code avec ce dossier.</li>
+        <li><strong>Optionnel</strong> : clé ElevenLabs et symbole boursier. Une valeur vide désactive la vue.</li>
+        <li><strong>Compiler et téléverser</strong> avec le schéma de partitions <code>min_spiffs</code> (voir ci-dessous).</li>
+      </ol>
+      <div class="code">
+        <div class="code-head"><span class="file">PowerShell · connexion réservée à la carte</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-powershell">$env:CLAUDE_CONFIG_DIR = "$env:USERPROFILE\.claude-mdma"
+claude        # connectez-vous dans le navigateur, puis tapez /exit</code></pre>
+      </div>
+      <div class="code">
+        <div class="code-head"><span class="file">Compilation et téléversement</span><button class="copy-btn">Copier</button></div>
+<pre><code class="language-bash">A="$LOCALAPPDATA/arduino-cli/arduino-cli.exe"
+FQBN="esp32:esp32:esp32c6:CDCOnBoot=cdc,PartitionScheme=min_spiffs"
+"$A" lib install ArduinoJson
+"$A" compile --jobs 2 --fqbn "$FQBN" firmware/mdma_autonome
+"$A" upload  --fqbn "$FQBN" -p COM3 firmware/mdma_autonome</code></pre>
+      </div>
+      <p>Le journal de la carte (115 200 bauds, en USB) indique chaque étape : réseau essayé, connexion, heure réglée, jeton renouvelé, relevés.</p>
+    </section>
+
+    <section id="pieges">
+      <h2><span class="n">10</span>Pièges rencontrés</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Symptôme</th><th>Cause</th><th>Solution</th></tr></thead>
+          <tbody>
+            <tr><td>Le programme ne tient pas en Flash</td><td>Wi-Fi + TLS + JSON : 1,33 Mo, pour 1,2 Mo dans le schéma par défaut</td><td>Schéma <code>min_spiffs</code> : 1,9 Mo pour le programme, et la mise à jour par Wi-Fi reste possible plus tard</td></tr>
+            <tr><td>Une requête Supabase « échoue » alors qu'elle a réussi</td><td>Avec <code>Prefer: count=exact</code> et <code>limit=1</code>, PostgREST répond <strong>206</strong> (contenu partiel), pas 200</td><td>Accepter 200 et 206</td></tr>
+            <tr><td>Le téléphone n'est pas vu</td><td>L'ESP32-C6 ne capte que le 2,4 GHz</td><td>Forcer la bande 2,4 GHz sur le partage de connexion</td></tr>
+            <tr><td>Claude Code déconnecté sur le PC</td><td>Le PC et la carte partagent la même connexion et se volent le jeton</td><td>Une connexion séparée, réservée à la carte</td></tr>
+            <tr><td>Le PC rame pendant la compilation</td><td>arduino-cli utilise tous les cœurs</td><td><code>--jobs 2</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="securite">
+      <h2><span class="n">11</span>Sécurité</h2>
+      <p>Contrairement à la V1, la carte contient maintenant des secrets : mots de passe Wi-Fi, jeton Claude, clés d'API. N'importe qui peut lire toute la Flash d'une carte branchée en USB. Pour limiter les dégâts en cas de perte :</p>
+      <ul>
+        <li>des clés aux <strong>droits minimaux</strong>, par exemple ElevenLabs avec la seule permission « Utilisateur » en lecture ;</li>
+        <li>une connexion Claude <strong>dédiée</strong>, qui peut être révoquée sans toucher à celle du PC ;</li>
+        <li><code>secrets.h</code> dans le <code>.gitignore</code>, avec seulement <code>secrets.h.example</code> publié dans le dépôt.</li>
+      </ul>
+      <p>Le chiffrement de la Flash de l'ESP32 protégerait mieux, mais il grave des eFuses de façon irréversible. Il n'est pas activé dans ce projet.</p>
+    </section>
+
+    <div class="pager">
+      <a href="guide.html"><small>← Précédent</small><b>Guide pas à pas (V1)</b></a>
+      <a class="next" href="boitiers.html"><small>Suivant →</small><b>Boîtiers et achat</b></a>
+    </div>
+  </article>
+</div>
+
+<footer>
+  <div class="wrap">
+    <span>MDMA - MiniDisplay MiniAutomations · 2026 Q4 · Projet perso</span>
+    <span><a href="guide.html">Refaire le projet pas à pas</a></span>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script src="js/docs.js"></script>
+</body>
+</html>

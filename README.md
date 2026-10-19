@@ -2,11 +2,15 @@
 
 Moniteur de quota Claude (session 5 h + semaine) sur la carte **Waveshare ESP32-C6-LCD-1.47**.
 
+Deux versions :
+
 ```
-Claude API ──HTTPS──> PC : bridge/MiniDisplayBridge.ps1 ──USB série──> ESP32-C6 : firmware/claude_usage
+V1  Claude API ──HTTPS──> PC : bridge/MiniDisplayBridge.ps1 ──USB série──> ESP32-C6 : firmware/claude_usage
+V2  Claude API <──HTTPS── ESP32-C6 : firmware/mdma_autonome ──Wi-Fi (partage de connexion)
 ```
 
-**Démarrage** : double-cliquez sur `bridge/Start-MiniDisplayBridge.vbs`, la carte étant branchée en USB-C.
+- **V1 · pont USB** (repère Git `v1-usb`) : double-cliquez sur `bridge/Start-MiniDisplayBridge.vbs`, la carte étant branchée en USB-C.
+- **V2 · autonome** : pour les PC dont les ports USB sont bloqués. La carte se connecte seule en Wi-Fi, un chargeur USB suffit. Réglages dans `firmware/mdma_autonome/secrets.h` (voir [firmware/](firmware/README.md)).
 
 ## Contenu
 

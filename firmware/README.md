@@ -3,7 +3,8 @@
 | Sketch | Rôle |
 |---|---|
 | `hello_world/` | test de l'écran et de la LED RGB |
-| `claude_usage/` | **le projet** : affiche le quota Claude reçu du PC (voir [bridge/](../bridge/README.md)) |
+| `claude_usage/` | **V1** : affiche le quota Claude reçu du PC (voir [bridge/](../bridge/README.md)) |
+| `mdma_autonome/` | **V2** : la carte se connecte en Wi-Fi et relève tout elle-même, sans PC |
 
 Outils : `arduino-cli`, installé dans `%LOCALAPPDATA%\arduino-cli\`, avec le core `esp32:esp32` 3.3.12 et les bibliothèques Adafruit ST7789, GFX et NeoPixel.
 
@@ -37,3 +38,25 @@ Si le port n'apparaît pas : maintenez BOOT, appuyez sur RESET, relâchez RESET 
 - **Appui long** (0,7 s) : thème suivant, parmi Matrix, MS-DOS, Windows 98, Ubuntu, Claude Code (par défaut), macOS clair et Aperture Science. Les infos restent les mêmes, seul l'habillage change (couleurs, police pixel, barres, en-tête).
 - Le réglage de luminosité est conservé dans le code mais désactivé : passez `LONG_PRESS_BRIGHTNESS` à 1 pour le rendre à l'appui long.
 - Vue, thème et luminosité sont mémorisés en Flash (NVS, espace de noms `mdma`).
+
+## V2 : `mdma_autonome` (Wi-Fi, sans PC)
+
+Même affichage que `claude_usage`, mais la carte va chercher les données elle-même. `mdma_autonome.ino` gère l'affichage, le bouton et le menu, et `reseau.ino` une tâche FreeRTOS pour le Wi-Fi et les relevés HTTPS.
+
+1. Copiez `secrets.h.example` en `secrets.h` (ignoré par Git) et remplissez-le : réseaux Wi-Fi (2,4 GHz, essayés dans l'ordre), fuseau, jeton Claude, clés optionnelles.
+2. **Jeton Claude** : faites une connexion réservée à la carte, puis copiez le champ `refreshToken` de `%USERPROFILE%\.claude-mdma\.credentials.json`. Ne relancez plus Claude Code avec ce dossier : la carte renouvelle seule ce jeton et garde le dernier en Flash.
+   ```powershell
+   $env:CLAUDE_CONFIG_DIR = "$env:USERPROFILE\.claude-mdma"; claude   # connexion, puis /exit
+   ```
+   Un jeton `claude setup-token` ne suffit pas : il n'a pas le droit `user:profile` (403).
+3. Compilez avec la bibliothèque ArduinoJson et le schéma de partitions `min_spiffs` : le programme fait 1,33 Mo, au-delà des 1,2 Mo du schéma par défaut.
+   ```sh
+   FQBN="esp32:esp32:esp32c6:CDCOnBoot=cdc,PartitionScheme=min_spiffs"
+   "$A" lib install ArduinoJson
+   "$A" compile --jobs 2 --fqbn "$FQBN" firmware/mdma_autonome
+   "$A" upload  --fqbn "$FQBN" -p COM3 firmware/mdma_autonome
+   ```
+
+**Vue Réseau** (5ᵉ vue, à la place de la vue PC) : signal Wi-Fi, adresse IP, durée de connexion et une pastille par source (verte = relevé réussi, orange = échec, grise = en attente, cercle vide = non configurée). Sur cette vue, un **appui long** ouvre un menu qui défile tant qu'on reste appuyé : le relâchement choisit la ligne (Annuler, un réseau imposé, Automatique, Redémarrer, Veille). Un réseau imposé introuvable pendant 1 min fait revenir en automatique.
+
+Le journal de la carte (115 200 bauds) suit chaque étape : réseau essayé, heure réglée, jeton renouvelé, relevés.
