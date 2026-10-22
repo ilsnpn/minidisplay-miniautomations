@@ -108,9 +108,14 @@ static int httpJson(const char *url, const char *body, const char *const *header
   int code = body ? http.POST((uint8_t *)body, strlen(body)) : http.GET();
   if (code > 0) {
     if (range) *range = http.header("Content-Range");
-    const DeserializationError e = filter ? deserializeJson(doc, http.getStream(), DeserializationOption::Filter(*filter))
-                                          : deserializeJson(doc, http.getStream());
-    if (e && code == 200) code = -2;  // réponse illisible
+    // Corps lu en entier d'abord : lu en flux, la réponse arrivait tronquée (IncompleteInput)
+    const String raw = http.getString();
+    const DeserializationError e = filter ? deserializeJson(doc, raw, DeserializationOption::Filter(*filter))
+                                          : deserializeJson(doc, raw);
+    if (e && code == 200) {  // réponse illisible
+      Serial.printf("JSON %s : %s (%u octets)\n", url, e.c_str(), raw.length());
+      code = -2;
+    }
   }
   http.end();
   return code;
@@ -471,7 +476,8 @@ static void fetchSummary() {
 static void fetchMarket() {
   nextMarket = millis() + MARKET_MS;
   char label[24];
-  snprintf(label, sizeof(label), "%s", MARKET_SYMBOL);
+  const uint8_t sel = marketSel;
+  snprintf(label, sizeof(label), "%s", MARKET_LIST[sel]);
   toUpper(label);
   String ticker = label;
   if (ticker == "BTC" || ticker == "ETH" || ticker == "SOL") ticker += "-USD";
@@ -544,7 +550,9 @@ static void fetchMarket() {
   m.have = true;
   {
     Guard g;
+    if (sel != marketSel) return;  // cours changé pendant le relevé
     mk = m;
+    dirty = true;
   }
   markSource(SRC_MARKET, true);
 }
@@ -667,7 +675,10 @@ static void fetchOne() {
   else if (srcs[SRC_ELEVEN].on && due(nextEleven)) fetchEleven();
   else if (srcs[SRC_SIAM].on && due(nextOrders)) fetchOrders();
   else if (srcs[SRC_SIAM].on && due(nextSummary)) fetchSummary();
-  else if (srcs[SRC_MARKET].on && due(nextMarket)) fetchMarket();
+  else if (srcs[SRC_MARKET].on && (marketChanged || due(nextMarket))) {
+    marketChanged = false;
+    fetchMarket();
+  }
 }
 
 static void netTask(void *) {
@@ -691,7 +702,7 @@ void netSetup() {
     srcs[SRC_TIME].on = srcs[SRC_STATUS].on = true;
     srcs[SRC_CLAUDE].on = strlen(CLAUDE_REFRESH_TOKEN) > 0;
     srcs[SRC_ELEVEN].on = el.have = strlen(ELEVENLABS_API_KEY) > 0;
-    srcs[SRC_MARKET].on = strlen(MARKET_SYMBOL) > 0;
+    srcs[SRC_MARKET].on = strlen(MARKET_LIST[0]) > 0;
     srcs[SRC_SIAM].on = strlen(PALAIS_SIAM_URL) && strlen(PALAIS_SIAM_KEY) && strlen(PALAIS_SIAM_EMAIL) && strlen(PALAIS_SIAM_PASSWORD);
     if (el.have) snprintf(el.err, sizeof(el.err), "premier releve en cours");
     if (!srcs[SRC_CLAUDE].on) snprintf(st.err, sizeof(st.err), "aucun jeton Claude dans secrets.h");

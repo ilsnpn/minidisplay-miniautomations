@@ -28,6 +28,7 @@ inline void ledcWrite(int, int) {}
 #endif
 #ifndef max
 #define max(a,b) ((a)>(b)?(a):(b))
+#define constrain(x,lo,hi) ((x)<(lo)?(lo):((x)>(hi)?(hi):(x)))
 #endif
 class __FlashStringHelper;
 struct String { const char *c_str() const { return ""; } unsigned length() const { return 0; } };

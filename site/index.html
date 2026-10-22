@@ -164,7 +164,7 @@
         </div>
         <div class="explain-item">
           <span class="ico">B</span>
-          <div><h4>Le bouton BOOT</h4><p>Appui court : vue suivante. Appui long : thème suivant. En V2, sur la vue Réseau : menu Wi-Fi.</p></div>
+          <div><h4>Le bouton BOOT</h4><p>Appui court : vue suivante. Appui long : thème suivant. En V2, le thème se change sur la vue Home ; ailleurs, l'appui long ouvre les options de la vue.</p></div>
         </div>
       </div>
     </div>
@@ -176,9 +176,9 @@
     <div class="section-head">
       <span class="kicker">Thèmes</span>
       <h2>Retrouvez différents thèmes</h2>
-      <p>Appui long sur BOOT pour changer. Rendus pixel par pixel par le vrai firmware.</p>
+      <p>Appui long sur BOOT, depuis la vue Home, pour changer. Rendus pixel par pixel par le vrai firmware.</p>
     </div>
-    <div class="theme-tabs" role="group" aria-label="Vue affichée sur tous les thèmes"><button type="button" data-view="jauges" aria-pressed="true" class="on">Jauges</button><button type="button" data-view="chiffres" aria-pressed="false">Chiffres</button><button type="button" data-view="horloge" aria-pressed="false">Horloge</button><button type="button" data-view="elevenlabs" aria-pressed="false">ElevenLabs</button><button type="button" data-view="reseau" aria-pressed="false">Réseau</button><button type="button" data-view="pomodoro" aria-pressed="false">Pomodoro</button><button type="button" data-view="palais-siam" aria-pressed="false">Commandes repas</button><button type="button" data-view="bourse" aria-pressed="false">Action</button></div>
+    <div class="theme-tabs" role="group" aria-label="Vue affichée sur tous les thèmes"><button type="button" data-view="home" aria-pressed="false">Home</button><button type="button" data-view="jauges" aria-pressed="true" class="on">Jauges</button><button type="button" data-view="chiffres" aria-pressed="false">Chiffres</button><button type="button" data-view="horloge" aria-pressed="false">Horloge</button><button type="button" data-view="elevenlabs" aria-pressed="false">ElevenLabs</button><button type="button" data-view="reseau" aria-pressed="false">Réseau</button><button type="button" data-view="pomodoro" aria-pressed="false">Pomodoro</button><button type="button" data-view="palais-siam" aria-pressed="false">Commandes repas</button><button type="button" data-view="bourse" aria-pressed="false">Action</button><button type="button" data-view="eau" aria-pressed="false">Eau</button></div>
     <div class="theme-grid">
         <figure class="theme-card">
           <figcaption>Claude Code</figcaption>
@@ -749,9 +749,9 @@ function flyTo(view) {
   const dist = from.length();
   const to = VIEWS[view].clone().setLength(Math.min(Math.max(dist, 45), 90));
   flight = { from, to, t0: performance.now(), dur: 750 };
-  document.querySelectorAll('[data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === view)));
+  document.querySelectorAll('[data-view]:not(.theme-tabs *)').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === view)));
 }
-document.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => { stopAutoRotate(); flyTo(b.dataset.view); }));
+document.querySelectorAll('[data-view]:not(.theme-tabs *)').forEach((b) => b.addEventListener('click', () => { stopAutoRotate(); flyTo(b.dataset.view); }));
 
 // Lien direct : ?view=bottom&select=pin:12 ou ?select=comp:esp32
 {

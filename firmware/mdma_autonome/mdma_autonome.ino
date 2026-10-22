@@ -2,17 +2,18 @@
 // Version sans PC : la carte se connecte en Wi-Fi et relève tout elle-même
 // (voir reseau.ino). Tous les réglages et secrets sont dans secrets.h.
 //
-// Vues : jauges du quota Claude (session 5 h + semaine), gros chiffres, horloge,
-// crédits ElevenLabs, Réseau (signal Wi-Fi et état des sources), Pomodoro,
-// PALais SIAM (toujours aux couleurs du site) et cours de bourse ou crypto.
+// Vues : Home (logo MDMA), quota Claude (trois versions : jauges, gros chiffres,
+// horloge), crédits ElevenLabs, Réseau (signal Wi-Fi et état des sources), Pomodoro,
+// PALais SIAM (toujours aux couleurs du site), cours de bourse ou crypto et Eau.
 // Une nouvelle commande PALais SIAM est annoncée 5 s par-dessus la vue en cours.
 //
 // Heures : secondes depuis 1970 en « heure locale à plat » (voir localEpoch),
 // affichées avec gmtime comme dans la V1. 0 = inconnue.
 //
-// Bouton BOOT (GPIO9) : appui court = vue suivante, appui long = thème suivant.
-// Sur la vue Réseau, l'appui long ouvre un menu qui défile tant qu'on reste
-// appuyé ; le relâchement choisit la ligne (réseau, automatique, redémarrer, veille).
+// Bouton BOOT (GPIO9) : appui court = vue suivante. Appui long : thème suivant sur
+// la vue Home ; ailleurs, menu d'options qui défile tant qu'on reste appuyé, le
+// relâchement choisit la ligne (version Claude, réseau, cours, verres d'eau...).
+// Rappel d'eau : la vue Eau s'affiche par-dessus la vue en cours, un appui note le verre.
 // Vue, thème et luminosité sont mémorisés en Flash (NVS).
 
 #include <SPI.h>
@@ -31,6 +32,7 @@
 #include <Fonts/FreeSans12pt7b.h>
 #include <Fonts/FreeSansBold9pt7b.h>
 #include <Fonts/FreeSansBold12pt7b.h>
+#include <Fonts/FreeSansBold18pt7b.h>
 #include <Fonts/FreeSansBold24pt7b.h>
 #include "state.h"
 // Copie locale de secrets.h.example, ignorée par Git. Le banc d'essai du site
@@ -55,7 +57,7 @@
 #define H 172
 #define STALE_MS 120000UL  // Wi-Fi perdu depuis plus longtemps : valeurs grisées
 #define LONG_PRESS_MS 700  // appui long sur BOOT
-#define MENU_STEP_MS 1200  // menu Réseau : une ligne de plus à chaque intervalle d'appui
+#define MENU_STEP_MS 700   // options : une ligne de plus à chaque intervalle d'appui
 #define TOAST_MS 1500      // durée d'un message éphémère en pied d'écran
 #define LONG_PRESS_BRIGHTNESS 0  // 1 : l'appui long règle la luminosité au lieu du thème
 
@@ -117,7 +119,13 @@ const uint16_t COL_WHITE = c565(255, 255, 255);
 const uint16_t COL_BLACK = 0;
 
 // ---------------- Vues et luminosité ----------------
-enum View : uint8_t { VIEW_GAUGES, VIEW_BIG, VIEW_CLOCK, VIEW_ELEVEN, VIEW_NET, VIEW_POMODORO, VIEW_SIAM, VIEW_MARKET, VIEW_COUNT };
+enum View : uint8_t { VIEW_HOME, VIEW_CLAUDE, VIEW_ELEVEN, VIEW_NET, VIEW_POMODORO, VIEW_SIAM, VIEW_MARKET, VIEW_WATER, VIEW_COUNT };
+static const char *const VIEW_NAMES[VIEW_COUNT] = { "MDMA", "Claude", "ElevenLabs", "Reseau", "Pomodoro", "SIAM", "Bourse", "Eau" };
+
+// Vue Claude : trois versions, au choix dans les options
+#define CLAUDE_STYLES 3
+static const char *const CLAUDE_STYLE_NAMES[CLAUDE_STYLES] = { "jauges", "chiffres", "horloge" };
+static uint8_t claudeStyle = 0;
 
 // Pomodoro : 25 min de travail, 5 min de pause, en boucle. Démarre après 5 s passées
 // sur la vue, s'arrête dès qu'on la quitte. Tourne sur la carte seule, sans le PC.
@@ -128,7 +136,9 @@ enum View : uint8_t { VIEW_GAUGES, VIEW_BIG, VIEW_CLOCK, VIEW_ELEVEN, VIEW_NET, 
 static uint32_t pomoEnter = 0;     // millis() à l'arrivée sur la vue
 static int8_t pomoLastPhase = -1;  // pour détecter le passage travail <-> pause
 static uint32_t pomoAlertUntil = 0;
-static uint8_t view = VIEW_GAUGES;
+static uint8_t view = VIEW_HOME;
+static uint32_t homeEnter = 0;  // millis() à l'arrivée sur Home : déploiement du logo
+#define HOME_ANIM_MS 1600
 
 const uint8_t BL_LEVELS[] = { 255, 110, 35 };  // 100 %, ~45 %, ~15 %
 const char *const BL_NAMES[] = { "100%", "45%", "15%" };
@@ -155,6 +165,38 @@ Source srcs[SRC_COUNT] = {};
 
 static const WifiNet WIFI_NETS[] = WIFI_NETWORKS;
 #define WIFI_COUNT ((int8_t)(sizeof(WIFI_NETS) / sizeof(WIFI_NETS[0])))
+
+// Cours proposés dans le menu de la vue Bourse, le premier par défaut
+#ifndef MARKET_SYMBOLS
+#define MARKET_SYMBOLS { MARKET_SYMBOL }
+#endif
+static const char *const MARKET_LIST[] = MARKET_SYMBOLS;
+#define MARKET_COUNT ((uint8_t)(sizeof(MARKET_LIST) / sizeof(MARKET_LIST[0])))
+static volatile uint8_t marketSel = 0;
+static volatile bool marketChanged = false;  // à relever tout de suite par la tâche réseau
+
+// Eau : WATER_GOAL_ML par jour en verres de WATER_GLASS_ML, répartis entre WATER_FROM_H
+// et WATER_TO_H. 1,5 L en verres de 25 cl de 9 h à 19 h : un rappel toutes les 1 h 40.
+// Un rappel ne sonne que si l'on est en retard sur ce rythme.
+#ifndef WATER_GOAL_ML
+#define WATER_GOAL_ML 1500
+#endif
+#ifndef WATER_GLASS_ML
+#define WATER_GLASS_ML 250
+#endif
+#ifndef WATER_FROM_H
+#define WATER_FROM_H 9
+#endif
+#ifndef WATER_TO_H
+#define WATER_TO_H 19
+#endif
+#define WATER_TARGET ((WATER_GOAL_ML + WATER_GLASS_ML - 1) / WATER_GLASS_ML)  // verres par jour
+#define WATER_STEP_S ((WATER_TO_H - WATER_FROM_H) * 3600UL / WATER_TARGET)    // écart entre deux verres
+#define WATER_SHOW_MS 60000UL      // sans appui, le rappel s'efface au bout d'une minute
+#define WATER_SNOOZE_MS 1200000UL  // puis revient 20 min plus tard si le verre manque toujours
+static uint32_t waterUntil = 0, waterSnoozeMs = 0;
+static uint8_t waterGlasses = 0;  // verres bus aujourd'hui
+static uint32_t waterDay = 0;     // jour de ce compte (heure locale / 86400)
 
 static SemaphoreHandle_t gLock;    // verrou récursif partagé avec la tâche réseau
 static volatile bool dirty = false;  // nouvelles données : à redessiner
@@ -479,7 +521,9 @@ static void drawBar(int16_t bx, int16_t by, int16_t bw, int16_t bh, const Gauge 
   }
 }
 
-static bool menuOpen = false;  // menu de la vue Réseau, ouvert par un appui long
+static bool menuOpen = false;  // options de la vue, ouvertes par un appui long
+static bool waterActive();
+static void waterFooter(char *out, size_t n);
 
 // Pied de page : état de la liaison à gauche, indicateur de vue à droite
 static void drawFooter() {
@@ -488,8 +532,17 @@ static void drawFooter() {
   if (millis() < toastUntil) {
     snprintf(buf, sizeof(buf), "%s", toast);
     col = COL_TEXT;
+  } else if (menuOpen) {
+    snprintf(buf, sizeof(buf), "Relachez pour choisir");
+  } else if (waterActive()) {
+    snprintf(buf, sizeof(buf), "Appui : verre bu");
+    col = COL_TEXT;
+  } else if (view == VIEW_HOME) {
+    snprintf(buf, sizeof(buf), "Appui long : theme suivant");
   } else if (view == VIEW_NET) {
-    snprintf(buf, sizeof(buf), menuOpen ? "Relachez pour choisir" : "Appui long : menu");
+    snprintf(buf, sizeof(buf), "Appui long : menu");
+  } else if (view == VIEW_WATER) {
+    waterFooter(buf, sizeof(buf));
   } else if (!net.up && !timeOk()) {
     snprintf(buf, sizeof(buf), "Connexion Wi-Fi %s...", net.trying >= 0 ? WIFI_NETS[net.trying].ssid : "");
     col = COL_WARN;
@@ -714,6 +767,51 @@ static uint8_t menuSel = 0;
 #define MENU_SLEEP (MENU_AUTO + 2)
 #define MENU_COUNT (MENU_AUTO + 3)
 
+// Options de chaque vue (appui long), « Annuler » en premier. 0 : pas d'options.
+#define WATER_MENU 4
+static uint8_t menuCount() {
+  switch (view) {
+    case VIEW_CLAUDE: return 1 + CLAUDE_STYLES;
+    case VIEW_NET: return MENU_COUNT;
+    case VIEW_MARKET: return 1 + MARKET_COUNT;
+    case VIEW_WATER: return WATER_MENU;
+    case VIEW_POMODORO: return 2;
+    default: return 0;
+  }
+}
+
+static void menuLabel(uint8_t i, char *label, size_t ln, char *tag, size_t tn) {
+  if (i == 0) {
+    snprintf(label, ln, "Annuler");
+    return;
+  }
+  switch (view) {
+    case VIEW_CLAUDE:
+      snprintf(label, ln, "Version %u - %s", i, CLAUDE_STYLE_NAMES[i - 1]);
+      if (claudeStyle == i - 1) snprintf(tag, tn, "actif");
+      break;
+    case VIEW_MARKET:
+      snprintf(label, ln, "%s", MARKET_LIST[i - 1]);
+      if (marketSel == i - 1) snprintf(tag, tn, "actif");
+      break;
+    case VIEW_WATER: {
+      static const char *const L[] = { "", "+1 verre", "-1 verre", "Remise a zero" };
+      snprintf(label, ln, "%s", L[i]);
+      break;
+    }
+    case VIEW_POMODORO: snprintf(label, ln, "Recommencer"); break;
+    default:  // Réseau
+      if (i < MENU_AUTO) {
+        snprintf(label, ln, "Wi-Fi %s", WIFI_NETS[i - 1].ssid);
+        if (net.up && net.current == i - 1) snprintf(tag, tn, "connecte");
+      } else if (i == MENU_AUTO) {
+        snprintf(label, ln, "Automatique");
+        if (net.forced < 0) snprintf(tag, tn, "actif");
+      } else if (i == MENU_RESTART) snprintf(label, ln, "Redemarrer");
+      else snprintf(label, ln, "Veille");
+  }
+}
+
 static const char *const SRC_NAMES[SRC_COUNT] = { "Heure", "Claude", "Statut", "Eleven", "Bourse", "SIAM" };
 
 // Barres de signal façon téléphone, de 0 à 4
@@ -735,19 +833,13 @@ static void fmtDuration(char *out, size_t n, uint32_t s) {
 }
 
 static void drawMenu() {
-  const int16_t y0 = 32, rh = min(20, (H - y0 - 16) / MENU_COUNT);
+  drawHeader(VIEW_NAMES[view], "options");
+  const uint8_t count = menuCount();
+  const int16_t y0 = 32, rh = min(20, (H - y0 - 16) / count);
   setRole(F_BODY);
-  for (uint8_t i = 0; i < MENU_COUNT; i++) {
+  for (uint8_t i = 0; i < count; i++) {
     char label[40], tag[12] = "";
-    if (i == 0) snprintf(label, sizeof(label), "Annuler");
-    else if (i < MENU_AUTO) {
-      snprintf(label, sizeof(label), "Wi-Fi %s", WIFI_NETS[i - 1].ssid);
-      if (net.up && net.current == i - 1) snprintf(tag, sizeof(tag), "connecte");
-    } else if (i == MENU_AUTO) {
-      snprintf(label, sizeof(label), "Automatique");
-      if (net.forced < 0) snprintf(tag, sizeof(tag), "actif");
-    } else if (i == MENU_RESTART) snprintf(label, sizeof(label), "Redemarrer");
-    else snprintf(label, sizeof(label), "Veille");
+    menuLabel(i, label, sizeof(label), tag, sizeof(tag));
     if (T->pixel) {
       toUpper(label);
       toUpper(tag);
@@ -763,10 +855,6 @@ static void drawMenu() {
 static void drawNetView() {
   char buf[48], dur[16];
   drawHeader("Reseau", net.up && net.current >= 0 ? WIFI_NETS[net.current].ssid : "hors ligne");
-  if (menuOpen) {
-    drawMenu();
-    return;
-  }
 
   // Signal : barres, puissance en dBm et qualité
   const int bars = net.up ? max(1, signalBars(net.rssi)) : 0;
@@ -880,9 +968,10 @@ static void drawMarketView() {
 
   if (!mk.have) {
     setRole(F_SUB);
-    drawCenter("aucun cours", W / 2, 90, COL_GREY);
+    drawCenter(srcs[SRC_MARKET].on ? "releve en cours..." : "aucun cours", W / 2, 90, COL_GREY);
     setRole(F_BODY);
-    drawCenter("MARKET_SYMBOL dans secrets.h", W / 2, 116, COL_DIM);
+    if (!srcs[SRC_MARKET].on) drawCenter("MARKET_SYMBOLS dans secrets.h", W / 2, 116, COL_DIM);
+    else if (srcs[SRC_MARKET].fail) drawCenter("dernier essai en echec", W / 2, 116, COL_DIM);
     return;
   }
 
@@ -1150,11 +1239,178 @@ static void drawSiamView() {
   siamFrame();
 }
 
+// ---------------- Vue Eau ----------------
+static bool waterActive() {
+  return waterUntil && millis() < waterUntil;
+}
+
+// Début de la plage de rappels du jour, en heure locale à plat
+static uint32_t waterStart(uint32_t now) {
+  return now / 86400 * 86400 + WATER_FROM_H * 3600UL;
+}
+
+// Verres attendus à cette heure : un au début de la plage, puis un par intervalle
+static uint8_t waterExpected(uint32_t now) {
+  if (now < waterStart(now)) return 0;
+  return min((uint32_t)WATER_TARGET, (now - waterStart(now)) / WATER_STEP_S + 1);
+}
+
+static void waterSave() {
+  prefs.putUChar("wgl", waterGlasses);
+  prefs.putUInt("wday", waterDay);
+}
+
+static void waterRollDay(uint32_t now) {
+  if (!now || now / 86400 == waterDay) return;
+  waterDay = now / 86400;
+  waterGlasses = 0;
+  waterSave();
+}
+
+static void waterAdd(int8_t d) {
+  waterRollDay(nowLocal());
+  waterGlasses = constrain((int)waterGlasses + d, 0, 40);
+  waterSave();
+  waterUntil = 0;
+  if (d > 0) waterSnoozeMs = 0;
+  char msg[32];
+  snprintf(msg, sizeof(msg), "Eau : %u / %u verres", waterGlasses, WATER_TARGET);
+  showToast(msg);
+}
+
+// Prochain verre : « prochain verre vers 14:00 », « objectif atteint »
+static void waterFooter(char *out, size_t n) {
+  const uint32_t now = nowLocal();
+  if (waterGlasses >= WATER_TARGET) snprintf(out, n, "Objectif atteint, bravo");
+  else if (!now) snprintf(out, n, "Reglage de l'heure...");
+  else {
+    const uint32_t next = waterStart(now) + waterGlasses * WATER_STEP_S;
+    char t[8];
+    fmtClock(t, sizeof(t), next);
+    if (next <= now) snprintf(out, n, "Un verre maintenant");
+    else snprintf(out, n, "Prochain verre vers %s", t);
+  }
+}
+
+// Verre stylisé : trapèze, rempli s'il est bu
+static void drawGlass(int16_t x, int16_t y, bool full, uint16_t blue) {
+  const int16_t wt = 18, wb = 13, h = 24, dx = (wt - wb) / 2;
+  if (full) {
+    canvas.fillTriangle(x, y, x + wt, y, x + dx, y + h, blue);
+    canvas.fillTriangle(x + wt, y, x + dx, y + h, x + dx + wb, y + h, blue);
+  }
+  const uint16_t edge = full ? blue : COL_DIM;
+  canvas.drawLine(x, y, x + dx, y + h, edge);
+  canvas.drawLine(x + wt, y, x + dx + wb, y + h, edge);
+  canvas.drawFastHLine(x + dx, y + h, wb + 1, edge);
+}
+
+static void drawWaterView() {
+  char buf[32];
+  const uint16_t blue = c565(40, 140, 230);
+  waterRollDay(nowLocal());
+  snprintf(buf, sizeof(buf), "objectif %d.%d L", WATER_GOAL_ML / 1000, WATER_GOAL_ML % 1000 / 100);
+  drawHeader("Eau", waterActive() ? "c'est l'heure !" : buf);
+
+  // Quantité bue en grand, l'objectif à côté
+  const uint32_t ml = (uint32_t)waterGlasses * WATER_GLASS_ML;
+  setRole(F_BIG);
+  snprintf(buf, sizeof(buf), "%lu.%02lu", (unsigned long)(ml / 1000), (unsigned long)(ml % 1000 / 10));
+  drawLeft(buf, MX, 84, waterActive() ? blue : COL_TEXT);
+  const int16_t bw = textWidth(buf);
+  setRole(F_LABEL);
+  drawLeft("L", MX + bw + 6, 84, COL_DIM);
+
+  // Un verre par rappel de la journée
+  const uint8_t shown = min(WATER_TARGET, 8);
+  for (uint8_t i = 0; i < shown; i++) drawGlass(MX + i * 28, 104, i < waterGlasses, blue);
+  if (waterGlasses > shown) {
+    setRole(F_BODY);
+    snprintf(buf, sizeof(buf), "+%u", waterGlasses - shown);
+    drawLeft(buf, MX + shown * 28, 126, blue);
+  }
+
+  // Bouteille qui se remplit, pourcentage dedans
+  const int16_t bx = W - MX - 50, by = 46, bwid = 48, bh = 92;
+  canvas.fillRoundRect(bx + 16, by - 10, 16, 12, 3, COL_DIM);  // bouchon
+  canvas.drawRoundRect(bx, by, bwid, bh, 10, COL_DIM);
+  const int16_t fill = (int32_t)(bh - 6) * min(ml, (uint32_t)WATER_GOAL_ML) / WATER_GOAL_ML;
+  if (fill > 0) canvas.fillRoundRect(bx + 3, by + bh - 3 - fill, bwid - 6, fill, 7, blue);
+  setRole(F_LABEL);
+  snprintf(buf, sizeof(buf), "%lu%%", (unsigned long)(ml * 100 / WATER_GOAL_ML));
+  drawCenter(buf, bx + bwid / 2, by + bh / 2 + 6, COL_TEXT);
+}
+
+// Déclenche le rappel quand on est en retard sur le rythme, dans la plage horaire
+static void waterTick() {
+  static uint32_t last = 0;
+  if (WATER_GOAL_ML <= 0 || waterActive() || millis() - last < 10000) return;
+  last = millis();
+  const uint32_t now = nowLocal();
+  if (!now) return;
+  waterRollDay(now);
+  const uint32_t h = now / 3600 % 24;
+  if (h < WATER_FROM_H || h >= WATER_TO_H || waterGlasses >= waterExpected(now)) return;
+  if (waterSnoozeMs && (int32_t)(millis() - waterSnoozeMs) < 0) return;
+  waterUntil = millis() + WATER_SHOW_MS;
+  waterSnoozeMs = waterUntil + WATER_SNOOZE_MS;
+  dirty = true;
+}
+
+// ---------------- Vue Home ----------------
+// Logo du site : M D M A en couleur d'accent, qui se déploient en
+// « MiniDisplay / MiniAutomations » à l'arrivée sur la vue.
+static void drawWord(int16_t x, int16_t base, const char *a, const char *ra, const char *b, const char *rb, float t) {
+  char buf[16];
+  const char *parts[4] = { a, ra, b, rb };
+  for (uint8_t k = 0; k < 4; k++) {
+    const bool initial = k % 2 == 0;
+    snprintf(buf, sizeof(buf), "%s", parts[k]);
+    if (!initial) buf[(size_t)(strlen(buf) * t + 0.5f)] = 0;  // lettres révélées
+    if (T->pixel) toUpper(buf);
+    drawLeft(buf, x, base, initial ? COL_ACCENT : COL_TEXT);
+    x += textWidth(buf);
+  }
+}
+
+// Marque du site : petit écran sombre, barre d'accent
+static void brandMark(int16_t x, int16_t y) {
+  canvas.fillRoundRect(x, y, 34, 21, 5, c565(58, 58, 70));
+  canvas.fillRoundRect(x + 3, y + 3, 28, 15, 3, c565(17, 17, 17));
+  canvas.fillRoundRect(x + 7, y + 8, 14, 5, 2, COL_ACCENT);
+}
+
+static void drawHomeView() {
+  const uint32_t since = millis() - homeEnter;
+  float t = since < 400 ? 0 : (float)(since - 400) / (HOME_ANIM_MS - 400);
+  t = t > 1 ? 1 : t;
+  t = 1 - (1 - t) * (1 - t) * (1 - t);  // ralentit à l'arrivée, comme sur le site
+
+  if (T->pixel) setRole(F_VALUE);
+  else {
+    pxSize = 0;
+    canvas.setFont(&FreeSansBold18pt7b);
+    canvas.setTextSize(1);
+  }
+  drawWord(MX + 4, 62, "M", "ini", "D", "isplay", t);
+  drawWord(MX + 4, 104, "M", "ini", "A", "utomations", t);
+
+  // Marque, thème courant et pastille d'état
+  brandMark(MX + 4, 116);
+  char buf[32];
+  setRole(F_LABEL);
+  snprintf(buf, sizeof(buf), "%s", T->name);
+  if (T->pixel) toUpper(buf);
+  drawLeft(buf, MX + 48, 133, COL_DIM);
+  statusDot(W - MX - 6, 127, 5);
+}
+
 static void render() {
   if (sleeping) return;
   Guard g;  // la tâche réseau ne modifie rien pendant le dessin
   dirty = false;
-  if (orderActive() || view == VIEW_SIAM) {  // identité du site, quel que soit le thème
+  const bool water = waterActive() && !orderActive();  // rappel : vue Eau par-dessus
+  if (orderActive() || (view == VIEW_SIAM && !water)) {  // identité du site, quel que soit le thème
     if (orderActive()) drawOrderView();
     else drawSiamView();
     tft.drawRGBBitmap(0, 0, canvas.getBuffer(), W, H);
@@ -1162,9 +1418,16 @@ static void render() {
   }
   canvas.fillScreen(COL_BG);
   if (T->fx == FX_RAIN) drawRain();
-  switch (view) {
-    case VIEW_BIG: drawBigView(); break;
-    case VIEW_CLOCK: drawClockView(); break;
+  if (water) drawWaterView();
+  else if (menuOpen) drawMenu();
+  else switch (view) {
+    case VIEW_HOME: drawHomeView(); break;
+    case VIEW_CLAUDE:
+      if (claudeStyle == 1) drawBigView();
+      else if (claudeStyle == 2) drawClockView();
+      else drawGaugesView();
+      break;
+    case VIEW_WATER: drawWaterView(); break;
     case VIEW_ELEVEN: drawElevenView(); break;
     case VIEW_NET: drawNetView(); break;
     case VIEW_POMODORO: drawPomodoroView(); break;
@@ -1184,6 +1447,8 @@ static void updateLed() {
     // veille : LED éteinte
   } else if (orderActive()) {  // commande : clignote en jaune curry
     if ((millis() / 250) % 2 == 0) c = rgb.Color(255, 170, 0);
+  } else if (waterActive()) {  // rappel d'eau : clignote en bleu
+    if ((millis() / 500) % 2 == 0) c = rgb.Color(40, 140, 230);
   } else if (view == VIEW_POMODORO) {  // Pomodoro : couleur de la phase, clignote au changement
     const Pomo p = pomoState();
     const RGB k = p.work ? T->ok : T->behind;
@@ -1207,6 +1472,7 @@ static void showToast(const char *msg) {
 
 static void nextView() {
   view = (view + 1) % VIEW_COUNT;
+  if (view == VIEW_HOME) homeEnter = millis();
   prefs.putUChar("view", view);
   if (view == VIEW_POMODORO) {  // chaque arrivée relance le compte à rebours de 5 s
     pomoEnter = millis();
@@ -1260,6 +1526,34 @@ static void wake() {
 static void runMenu(uint8_t i) {
   char msg[40];
   if (i == 0) return;  // Annuler
+  if (view == VIEW_CLAUDE) {
+    claudeStyle = i - 1;
+    prefs.putUChar("cst", claudeStyle);
+    return;
+  }
+  if (view == VIEW_WATER) {
+    if (i == 3) waterAdd(-(int8_t)waterGlasses);
+    else waterAdd(i == 1 ? 1 : -1);
+    return;
+  }
+  if (view == VIEW_POMODORO) {
+    pomoEnter = millis();
+    pomoLastPhase = -1;
+    return;
+  }
+  if (view == VIEW_MARKET) {
+    if (marketSel == i - 1) return;
+    marketSel = i - 1;
+    prefs.putUChar("mkt", marketSel);
+    {
+      Guard g;
+      mk.have = false;  // pas d'ancien cours sous le nouveau nom
+    }
+    marketChanged = true;
+    snprintf(msg, sizeof(msg), "Cours %s", MARKET_LIST[marketSel]);
+    showToast(msg);
+    return;
+  }
   if (i < MENU_AUTO) {
     wantNet = i - 1;
     snprintf(msg, sizeof(msg), "Connexion a %s...", WIFI_NETS[i - 1].ssid);
@@ -1282,10 +1576,10 @@ static void runMenu(uint8_t i) {
   }
 }
 
-// Appui court (relâché avant 700 ms) : vue suivante. Appui long : thème suivant,
-// déclenché dès les 700 ms atteintes, sans attendre le relâchement.
-// Sur la vue Réseau, l'appui long ouvre le menu : la sélection descend d'une
-// ligne toutes les 1,2 s tant qu'on reste appuyé, et le relâchement la valide.
+// Appui court (relâché avant 700 ms) : vue suivante. Appui long, déclenché dès les
+// 700 ms atteintes : thème suivant sur la vue Home, options ailleurs. Dans les options,
+// la sélection descend d'une ligne toutes les 0,7 s tant qu'on reste appuyé, et le
+// relâchement la valide.
 static void pollButton() {
   static bool down = false, longDone = false;
   static uint32_t t0 = 0, lastChange = 0, menuStep = 0;
@@ -1307,6 +1601,10 @@ static void pollButton() {
         orderUntil = 0;
         render();
         updateLed();
+      } else if (waterActive()) {
+        waterAdd(1);
+        render();
+        updateLed();
       } else {
         nextView();
       }
@@ -1314,20 +1612,23 @@ static void pollButton() {
   }
   if (down && !longDone && now - t0 >= LONG_PRESS_MS) {
     longDone = true;
-    if (view == VIEW_NET && !orderActive()) {
+    if (orderActive() || waterActive()) {
+      // une annonce est à l'écran : l'appui long ne fait rien
+    } else if (view == VIEW_HOME) {
+      if (LONG_PRESS_BRIGHTNESS) nextBrightness();
+      else nextTheme();
+    } else if (!menuCount()) {
+      showToast("Pas d'options ici");
+    } else {
       menuOpen = true;
       menuSel = 0;  // « Annuler » : un appui trop court ne déclenche rien
       menuStep = now;
       render();
-    } else if (LONG_PRESS_BRIGHTNESS) {
-      nextBrightness();
-    } else {
-      nextTheme();
     }
   }
   if (menuOpen && down && now - menuStep >= MENU_STEP_MS) {
     menuStep = now;
-    menuSel = (menuSel + 1) % MENU_COUNT;
+    menuSel = (menuSel + 1) % menuCount();
     render();
   }
 }
@@ -1359,10 +1660,14 @@ void setup() {
   gLock = xSemaphoreCreateRecursiveMutex();
 
   prefs.begin("mdma", false);
-  view = prefs.getUChar("view", VIEW_GAUGES) % VIEW_COUNT;
+  view = prefs.getUChar("view", VIEW_HOME) % VIEW_COUNT;
+  claudeStyle = prefs.getUChar("cst", 0) % CLAUDE_STYLES;
+  waterGlasses = prefs.getUChar("wgl", 0);
+  waterDay = prefs.getUInt("wday", 0);
   themeIndex = prefs.getUChar("theme", THEME_DEFAULT) % THEME_COUNT;
   T = &THEMES[themeIndex];
   blIndex = prefs.getUChar("bl", 0) % (sizeof(BL_LEVELS) / sizeof(BL_LEVELS[0]));
+  marketSel = prefs.getUChar("mkt", 0) % MARKET_COUNT;
 
   ledcAttach(PIN_LCD_BL, 5000, 8);  // rétroéclairage en PWM 5 kHz, 8 bits
   ledcWrite(PIN_LCD_BL, BL_LEVELS[blIndex]);
@@ -1383,7 +1688,7 @@ void setup() {
     while (true) delay(1000);
   }
   netSetup();  // sources configurées, puis tâche réseau (Wi-Fi et relevés)
-  pomoEnter = millis();
+  pomoEnter = homeEnter = millis();
   render();
   updateLed();
 }
@@ -1395,6 +1700,7 @@ void loop() {
     return;
   }
   pollButton();
+  waterTick();
 
   // Rafraîchit le repère de temps, les nuances des jauges et la vue horloge,
   // et efface le message éphémère une fois expiré
@@ -1403,9 +1709,10 @@ void loop() {
   const bool toastActive = millis() < toastUntil;
   // Pomodoro : secondes à l'écran, et LED qui clignote pendant l'alerte
   static bool orderShown = false;
-  const bool orderNow = orderActive();
+  const bool orderNow = orderActive() || waterActive();
   // Annonce : barre de temps et LED animées, puis retour à la vue dès la fin
-  const uint32_t every = orderNow ? 100 : view == VIEW_POMODORO ? (millis() < pomoAlertUntil ? 250 : 1000) : 5000;
+  const bool homeAnim = view == VIEW_HOME && millis() - homeEnter < HOME_ANIM_MS + 100;
+  const uint32_t every = orderNow ? 100 : homeAnim ? 30 : view == VIEW_POMODORO ? (millis() < pomoAlertUntil ? 250 : 1000) : 5000;
   if (dirty || millis() - lastDraw >= every || (toastShown && !toastActive) || (orderShown && !orderNow)) {
     lastDraw = millis();
     render();

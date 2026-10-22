@@ -70,16 +70,24 @@ int main(int argc, char **argv) {
   net.upSinceMs = g_millis - (2 * 3600 + 14 * 60) * 1000UL;
   for (uint8_t i = 0; i < SRC_COUNT; i++) srcs[i] = { true, now - 60, false };
 
+  waterGlasses = 3;  // 0,75 L sur 1,5 L
+  waterDay = now / 86400;
   pomoEnter = g_millis - POMO_ARM_MS - (6 * 60 + 36) * 1000UL;  // Pomodoro : 18:24 restantes
   for (uint8_t t = 0; t < THEME_COUNT; t++) {
     T = &THEMES[t];
+    // Images numérotées comme sur le site : les trois versions Claude, puis les autres vues
+    uint8_t n = 0;
     for (uint8_t v = 0; v < VIEW_COUNT; v++) {
       view = v;
-      render();
-      char p[512];
-      snprintf(p, sizeof(p), "%s/t%d_v%d.ppm", out, t, v);
-      dump(p);
+      for (uint8_t k = 0; k < (v == VIEW_CLAUDE ? CLAUDE_STYLES : 1); k++) {
+        claudeStyle = k;
+        render();
+        char p[512];
+        snprintf(p, sizeof(p), "%s/t%d_v%d.ppm", out, t, n++);
+        dump(p);
+      }
     }
+    claudeStyle = 0;
   }
   char p[512];
   // Menu de la vue Réseau, sélection sur « Automatique »

@@ -11,7 +11,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 OUT = ROOT / 'site' / 'assets' / 'themes'
 THEMES = ['matrix', 'msdos', 'win98', 'ubuntu', 'claude', 'macos', 'aperture']  # ordre de THEMES[] dans le .ino
-VIEWS = ['jauges', 'chiffres', 'horloge', 'elevenlabs', 'reseau', 'pomodoro', 'palais-siam', 'bourse']
+VIEWS = ['home', 'jauges', 'chiffres', 'horloge', 'elevenlabs', 'reseau', 'pomodoro', 'palais-siam', 'bourse', 'eau']  # vues du .ino, Claude en trois versions
 
 
 def zig():
