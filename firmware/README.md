@@ -57,6 +57,10 @@ Même affichage que `claude_usage`, mais la carte va chercher les données elle-
    "$A" upload  --fqbn "$FQBN" -p COM3 firmware/mdma_autonome
    ```
 
+**Vue Claude** : quatre versions au choix (appui long) : jauges, gros chiffres, puis les mêmes avec ElevenLabs en plus (session 5 h, semaine et crédits sur un même écran). La V2 n'a plus de vue ElevenLabs séparée ni de version horloge.
+
+**Rappel d'eau** : en retard sur l'objectif du jour, un écran bleu (verre, goutte et textes en blanc) passe par-dessus n'importe quelle vue pendant 1 min, avec une barre de temps qui défile en bas, comme l'annonce de commande. Un appui note le verre.
+
 **Vue Réseau** (5ᵉ vue, à la place de la vue PC) : signal Wi-Fi, adresse IP, durée de connexion et une pastille par source (verte = relevé réussi, orange = échec, grise = en attente, cercle vide = non configurée). Sur cette vue, un **appui long** ouvre un menu qui défile tant qu'on reste appuyé : le relâchement choisit la ligne (Annuler, un réseau imposé, Automatique, Redémarrer, Veille). Un réseau imposé introuvable pendant 1 min fait revenir en automatique.
 
 Le journal de la carte (115 200 bauds) suit chaque étape : réseau essayé, heure réglée, jeton renouvelé, relevés.

@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
   pomoEnter = g_millis - POMO_ARM_MS - (6 * 60 + 36) * 1000UL;  // Pomodoro : 18:24 restantes
   for (uint8_t t = 0; t < THEME_COUNT; t++) {
     T = &THEMES[t];
-    // Images numérotées comme sur le site : les trois versions Claude, puis les autres vues
+    // Images numérotées comme sur le site : les quatre versions Claude, puis les autres vues
     uint8_t n = 0;
     for (uint8_t v = 0; v < VIEW_COUNT; v++) {
       view = v;
@@ -108,8 +108,14 @@ int main(int argc, char **argv) {
   render();
   snprintf(p, sizeof(p), "%s/order.ppm", out);
   dump(p);
-  // Vue PALais SIAM, cuisine fermée
+  // Rappel d'eau, 12 s après son déclenchement
   orderUntil = 0;
+  waterUntil = g_millis + WATER_SHOW_MS - 12000;
+  render();
+  snprintf(p, sizeof(p), "%s/water.ppm", out);
+  dump(p);
+  waterUntil = 0;
+  // Vue PALais SIAM, cuisine fermée
   view = VIEW_SIAM;
   sm.open = false;
   render();

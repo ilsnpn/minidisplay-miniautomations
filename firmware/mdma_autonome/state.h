@@ -34,7 +34,7 @@ struct Eleven {
 struct Theme {
   const char *name;
   uint16_t bg, track, text, dim, accent, grey, warn;
-  uint16_t barBg, barFg;  // barre de titre (en-têtes DOS, Windows, Ubuntu, macOS)
+  uint16_t barBg, barFg;  // barre de titre (en-têtes Ubuntu, macOS)
   RGB ok, ahead, behind;  // jauge : dans le rythme, en avance, en retard
   bool pixel;             // police pixel intégrée plutôt que FreeSans
   uint8_t header, bar, fx;

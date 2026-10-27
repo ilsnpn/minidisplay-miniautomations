@@ -8,7 +8,7 @@
   <link rel="icon" href="favicon.ico" sizes="any">
   <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-  <meta name="description" content="MDMA : mini-écran USB open source sur ESP32-C6. Le PC envoie, l'écran affiche : quota Claude, crédits ElevenLabs, horloge, 7 thèmes.">
+  <meta name="description" content="MDMA : mini-écran USB open source sur ESP32-C6. Le PC envoie, l'écran affiche : quota Claude, crédits ElevenLabs, Pomodoro, 5 thèmes.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
@@ -57,7 +57,7 @@
       <h1>Un mini-écran USB <em>pour vos automatisations.</em></h1>
       <p class="lead">Le PC envoie, l'écran affiche. Quota Claude, crédits ElevenLabs, ou tout ce qu'un script sait relever. Sans Wi-Fi, un seul câble.</p>
       <ul class="uses">
-        <li>Quota Claude</li><li>Crédits ElevenLabs</li><li>Horloge</li><li>7 thèmes</li><li>Vos données</li>
+        <li>Quota Claude</li><li>Crédits ElevenLabs</li><li>Horloge</li><li>5 thèmes</li><li>Vos données</li>
       </ul>
       <p class="oss"><b>Open source.</b> Firmware, pont PC, modèle 3D et ce site seront publiés sur GitHub pour le reproduire.</p>
       <div class="stats">
@@ -178,7 +178,7 @@
       <h2>Retrouvez différents thèmes</h2>
       <p>Appui long sur BOOT, depuis la vue Home, pour changer. Rendus pixel par pixel par le vrai firmware.</p>
     </div>
-    <div class="theme-tabs" role="group" aria-label="Vue affichée sur tous les thèmes"><button type="button" data-view="home" aria-pressed="false">Home</button><button type="button" data-view="jauges" aria-pressed="true" class="on">Jauges</button><button type="button" data-view="chiffres" aria-pressed="false">Chiffres</button><button type="button" data-view="horloge" aria-pressed="false">Horloge</button><button type="button" data-view="elevenlabs" aria-pressed="false">ElevenLabs</button><button type="button" data-view="reseau" aria-pressed="false">Réseau</button><button type="button" data-view="pomodoro" aria-pressed="false">Pomodoro</button><button type="button" data-view="palais-siam" aria-pressed="false">Commandes repas</button><button type="button" data-view="bourse" aria-pressed="false">Action</button><button type="button" data-view="eau" aria-pressed="false">Eau</button></div>
+    <div class="theme-tabs" role="group" aria-label="Vue affichée sur tous les thèmes"><button type="button" data-view="home" aria-pressed="false">Home</button><button type="button" data-view="jauges" aria-pressed="true" class="on">Jauges</button><button type="button" data-view="chiffres" aria-pressed="false">Chiffres</button><button type="button" data-view="claude-eleven" aria-pressed="false">Jauges + Eleven</button><button type="button" data-view="chiffres-eleven" aria-pressed="false">Chiffres + Eleven</button><button type="button" data-view="reseau" aria-pressed="false">Réseau</button><button type="button" data-view="pomodoro" aria-pressed="false">Pomodoro</button><button type="button" data-view="palais-siam" aria-pressed="false">Commandes repas</button><button type="button" data-view="bourse" aria-pressed="false">Action</button><button type="button" data-view="eau" aria-pressed="false">Eau</button></div>
     <div class="theme-grid">
         <figure class="theme-card">
           <figcaption>Claude Code</figcaption>
@@ -187,14 +187,6 @@
         <figure class="theme-card">
           <figcaption>Matrix</figcaption>
           <div class="theme-screen"><img src="assets/themes/matrix-jauges.png" width="640" height="344" alt="Écran MDMA, thème Matrix" loading="lazy"></div>
-        </figure>
-        <figure class="theme-card">
-          <figcaption>MS-DOS</figcaption>
-          <div class="theme-screen"><img src="assets/themes/msdos-jauges.png" width="640" height="344" alt="Écran MDMA, thème MS-DOS" loading="lazy"></div>
-        </figure>
-        <figure class="theme-card">
-          <figcaption>Windows 98</figcaption>
-          <div class="theme-screen"><img src="assets/themes/win98-jauges.png" width="640" height="344" alt="Écran MDMA, thème Windows 98" loading="lazy"></div>
         </figure>
         <figure class="theme-card">
           <figcaption>Ubuntu</figcaption>

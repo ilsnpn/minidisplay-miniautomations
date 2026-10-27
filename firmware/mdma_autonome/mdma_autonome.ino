@@ -72,8 +72,8 @@ static constexpr uint16_t c565(uint8_t r, uint8_t g, uint8_t b) {
   return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
 }
 
-enum Header : uint8_t { H_PLAIN, H_DOS, H_WIN98, H_UBUNTU, H_MAC, H_APERTURE };
-enum BarStyle : uint8_t { B_ROUND, B_SEGMENT, B_WIN98 };
+enum Header : uint8_t { H_PLAIN, H_UBUNTU, H_MAC, H_APERTURE };
+enum BarStyle : uint8_t { B_ROUND, B_SEGMENT };
 enum Fx : uint8_t { FX_NONE, FX_SCAN, FX_RAIN };
 
 // nom, fond, piste, texte, atténué, accent, gris, alerte, barre titre fond/texte,
@@ -82,12 +82,6 @@ const Theme THEMES[] = {
   { "Matrix", c565(0, 0, 0), c565(0, 38, 10), c565(0, 255, 65), c565(10, 143, 46), c565(184, 255, 201),
     c565(10, 110, 36), c565(255, 77, 77), 0, 0,
     { 0, 255, 65 }, { 255, 77, 77 }, { 10, 143, 46 }, true, H_PLAIN, B_SEGMENT, FX_RAIN },
-  { "MS-DOS", c565(0, 0, 0), c565(48, 48, 48), c565(192, 192, 192), c565(128, 128, 128), c565(255, 255, 255),
-    c565(128, 128, 128), c565(255, 255, 85), c565(170, 170, 170), c565(0, 0, 0),
-    { 192, 192, 192 }, { 255, 85, 85 }, { 85, 85, 255 }, true, H_DOS, B_SEGMENT, FX_SCAN },
-  { "Windows 98", c565(192, 192, 192), c565(223, 223, 223), c565(0, 0, 0), c565(64, 64, 64), c565(0, 0, 128),
-    c565(96, 96, 96), c565(128, 0, 0), c565(0, 0, 128), c565(255, 255, 255),
-    { 0, 0, 128 }, { 170, 0, 0 }, { 0, 128, 128 }, false, H_WIN98, B_WIN98, FX_NONE },
   { "Ubuntu", c565(48, 10, 36), c565(94, 39, 80), c565(255, 255, 255), c565(179, 155, 171), c565(233, 84, 32),
     c565(122, 106, 117), c565(252, 175, 62), c565(17, 17, 17), c565(255, 255, 255),
     { 233, 84, 32 }, { 239, 41, 41 }, { 138, 226, 52 }, false, H_UBUNTU, B_ROUND, FX_NONE },
@@ -102,7 +96,7 @@ const Theme THEMES[] = {
     { 255, 154, 0 }, { 255, 59, 31 }, { 39, 167, 255 }, true, H_APERTURE, B_SEGMENT, FX_SCAN },
 };
 #define THEME_COUNT (sizeof(THEMES) / sizeof(THEMES[0]))
-#define THEME_DEFAULT 4  // Claude Code
+#define THEME_DEFAULT 2  // Claude Code
 
 static uint8_t themeIndex = THEME_DEFAULT;
 static const Theme *T = &THEMES[THEME_DEFAULT];
@@ -119,12 +113,12 @@ const uint16_t COL_WHITE = c565(255, 255, 255);
 const uint16_t COL_BLACK = 0;
 
 // ---------------- Vues et luminosité ----------------
-enum View : uint8_t { VIEW_HOME, VIEW_CLAUDE, VIEW_ELEVEN, VIEW_NET, VIEW_POMODORO, VIEW_SIAM, VIEW_MARKET, VIEW_WATER, VIEW_COUNT };
-static const char *const VIEW_NAMES[VIEW_COUNT] = { "MDMA", "Claude", "ElevenLabs", "Reseau", "Pomodoro", "SIAM", "Bourse", "Eau" };
+enum View : uint8_t { VIEW_HOME, VIEW_CLAUDE, VIEW_NET, VIEW_POMODORO, VIEW_SIAM, VIEW_MARKET, VIEW_WATER, VIEW_COUNT };
+static const char *const VIEW_NAMES[VIEW_COUNT] = { "MDMA", "Claude", "Reseau", "Pomodoro", "SIAM", "Bourse", "Eau" };
 
-// Vue Claude : trois versions, au choix dans les options
-#define CLAUDE_STYLES 3
-static const char *const CLAUDE_STYLE_NAMES[CLAUDE_STYLES] = { "jauges", "chiffres", "horloge" };
+// Vue Claude : quatre versions, au choix dans les options
+#define CLAUDE_STYLES 4
+static const char *const CLAUDE_STYLE_NAMES[CLAUDE_STYLES] = { "jauges", "chiffres", "jauges + Eleven", "chiffres + Eleven" };
 static uint8_t claudeStyle = 0;
 
 // Pomodoro : 25 min de travail, 5 min de pause, en boucle. Démarre après 5 s passées
@@ -332,8 +326,6 @@ static void toUpper(char *s) {
 
 // Polices ASCII uniquement (suffixe 7b) : pas d'accents.
 static const char *const DAYS_LONG[] = { "dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi" };
-static const char *const MONTHS[] = { "janvier", "fevrier", "mars", "avril", "mai", "juin",
-                                      "juillet", "aout", "septembre", "octobre", "novembre", "decembre" };
 
 static void fmtClock(char *out, size_t n, uint32_t t) {
   time_t tt = t;
@@ -356,16 +348,6 @@ static void fmtReset(char *out, size_t n, uint32_t reset) {
 
 // ---------------- Dessin : éléments communs ----------------
 #define MX 10  // marge horizontale
-
-// Relief Windows 98 : clair en haut à gauche, sombre en bas à droite (inversé si creux)
-static void bevel(int16_t x, int16_t y, int16_t w, int16_t h, bool sunken) {
-  const uint16_t hi = sunken ? c565(128, 128, 128) : COL_WHITE;
-  const uint16_t lo = sunken ? COL_WHITE : c565(128, 128, 128);
-  canvas.drawFastHLine(x, y, w, hi);
-  canvas.drawFastVLine(x, y, h, hi);
-  canvas.drawFastHLine(x, y + h - 1, w, lo);
-  canvas.drawFastVLine(x + w - 1, y, h, lo);
-}
 
 // Disque anticrénelé : chaque pixel du bord est mélangé au fond selon la part
 // couverte. fillCircle trace un hexagone à ces petits rayons.
@@ -418,35 +400,6 @@ static void drawHeader(const char *title, const char *sub) {
   }
 
   switch (T->header) {
-    case H_DOS:  // barre de menu inversée, invite de commande
-      canvas.fillRect(0, 0, W, 24, T->barBg);
-      setRole(F_TITLE);
-      snprintf(buf, sizeof(buf), "C:\\%s>%s", t, s);
-      drawLeft(buf, MX, 19, T->barFg);
-      fillCircleAA(W - MX - 6, 12, 7, T->barFg);
-      statusDot(W - MX - 6, 12, 5);
-      break;
-
-    case H_WIN98: {  // fenêtre en relief, barre de titre en dégradé, bouton fermer
-      bevel(0, 0, W, H, false);
-      for (int16_t x = 3; x < W - 3; x++) {
-        const RGB c = lerpRGB({ 0, 0, 128 }, { 16, 132, 208 }, (float)(x - 3) / (W - 6));
-        canvas.drawFastVLine(x, 3, 20, c565(c.r, c.g, c.b));
-      }
-      setRole(F_LABEL);
-      drawLeft(t, 8, 18, COL_WHITE);
-      drawLeft(s, 8 + textWidth(t) + 5, 18, c565(200, 215, 240));
-      const int16_t bx = W - 21, by = 6;
-      canvas.fillRect(bx, by, 16, 14, COL_BG);
-      bevel(bx, by, 16, 14, false);
-      for (int8_t d = 0; d < 2; d++) {
-        canvas.drawLine(bx + 4 + d, by + 3, bx + 10 + d, by + 9, COL_BLACK);
-        canvas.drawLine(bx + 10 + d, by + 3, bx + 4 + d, by + 9, COL_BLACK);
-      }
-      statusDot(bx - 12, 13, 5);
-      break;
-    }
-
     case H_UBUNTU:  // barre supérieure GNOME
       canvas.fillRect(0, 0, W, 24, T->barBg);
       setRole(F_LABEL);
@@ -499,12 +452,6 @@ static void drawBar(int16_t bx, int16_t by, int16_t bw, int16_t bh, const Gauge 
       for (int16_t x = 0; x + 2 <= fw; x += 6) canvas.fillRect(bx + x, by, fw - x < 4 ? fw - x : 4, bh, col);
       break;
 
-    case B_WIN98:  // barre de progression creuse à blocs
-      canvas.fillRect(bx, by, bw, bh, COL_TRACK);
-      bevel(bx, by, bw, bh, true);
-      for (int16_t x = 2; x + 2 <= fw - 2; x += 10) canvas.fillRect(bx + x, by + 2, fw - 2 - x < 8 ? fw - 2 - x : 8, bh - 4, col);
-      break;
-
     default: {  // B_ROUND
       const int16_t r = bh / 3;
       canvas.fillRoundRect(bx, by, bw, bh, r, COL_TRACK);
@@ -524,6 +471,7 @@ static void drawBar(int16_t bx, int16_t by, int16_t bw, int16_t bh, const Gauge 
 static bool menuOpen = false;  // options de la vue, ouvertes par un appui long
 static bool waterActive();
 static void waterFooter(char *out, size_t n);
+static void fitText(char *s, size_t cap, int16_t maxW);
 
 // Pied de page : état de la liaison à gauche, indicateur de vue à droite
 static void drawFooter() {
@@ -534,9 +482,6 @@ static void drawFooter() {
     col = COL_TEXT;
   } else if (menuOpen) {
     snprintf(buf, sizeof(buf), "Relachez pour choisir");
-  } else if (waterActive()) {
-    snprintf(buf, sizeof(buf), "Appui : verre bu");
-    col = COL_TEXT;
   } else if (view == VIEW_HOME) {
     snprintf(buf, sizeof(buf), "Appui long : theme suivant");
   } else if (view == VIEW_NET) {
@@ -561,14 +506,10 @@ static void drawFooter() {
     } else {
       buf[0] = 0;
     }
-  } else if (view == VIEW_ELEVEN && el.updated) {
-    char t[8];
-    fmtClock(t, sizeof(t), el.updated);
-    snprintf(buf, sizeof(buf), "Releve a %s", t);
-  } else if (view != VIEW_ELEVEN && st.err[0]) {
+  } else if (st.err[0]) {
     snprintf(buf, sizeof(buf), "%.44s", st.err);  // laisse la place aux points de vue
     col = COL_WARN;
-  } else if (view != VIEW_ELEVEN && st.updated) {
+  } else if (st.updated) {
     char t[8];
     fmtClock(t, sizeof(t), st.updated);
     snprintf(buf, sizeof(buf), "Releve a %s", t);
@@ -647,62 +588,45 @@ static void drawGaugesView() {
 }
 
 // ---------------- Vue 2 : gros chiffres ----------------
-static void drawBigColumn(int16_t cx, const char *label, const Gauge &g, uint32_t hours) {
-  const float frac = windowFraction(g, hours);
+// Colonne : libellé, pourcentage en grand, barre, puis une note (reset, crédits)
+static void drawBigColumn(int16_t cx, int16_t half, uint8_t role, const char *label, const Gauge &g, float frac, const char *note) {
   const uint16_t col = isStale() ? COL_GREY : gaugeColor(g, frac);
   char buf[24];
 
   setRole(F_LABEL);
   drawCenter(label, cx, 54, COL_DIM);
 
-  setRole(F_BIG);
+  setRole(role);
   if (g.used >= 0) snprintf(buf, sizeof(buf), "%d%%", g.used);
   else snprintf(buf, sizeof(buf), "--");
   drawCenter(buf, cx, 102, g.used >= 0 ? col : COL_GREY);
 
-  drawBar(cx - 62, 114, 124, 8, g, frac, col);
+  drawBar(cx - half, 114, 2 * half, 8, g, frac, col);
 
-  setRole(F_BODY);
-  if (g.reset && timeOk()) {
-    fmtReset(buf, sizeof(buf), g.reset);
+  setRole(role == F_BIG ? F_BODY : F_SMALL);  // trois colonnes : note plus petite
+  if (note[0]) {
+    snprintf(buf, sizeof(buf), "%s", note);
+    fitText(buf, sizeof(buf), 2 * half + 8);
     drawCenter(buf, cx, 146, COL_DIM);
   }
 }
 
+static void resetNote(char *out, size_t n, const Gauge &g) {
+  out[0] = 0;
+  if (g.reset && timeOk()) fmtReset(out, n, g.reset);
+}
+
 static void drawBigView() {
+  char n[24];
   drawHeader("Claude", "usage");
   canvas.drawFastVLine(W / 2, 40, 112, COL_TRACK);
-  drawBigColumn(W / 4, "SESSION 5 H", st.five, 5);
-  drawBigColumn(3 * W / 4, "SEMAINE", st.week, 168);
+  resetNote(n, sizeof(n), st.five);
+  drawBigColumn(W / 4, 62, F_BIG, "SESSION 5 H", st.five, windowFraction(st.five, 5), n);
+  resetNote(n, sizeof(n), st.week);
+  drawBigColumn(3 * W / 4, 62, F_BIG, "SEMAINE", st.week, windowFraction(st.week, 168), n);
 }
 
-// ---------------- Vue 3 : horloge ----------------
-static void drawClockView() {
-  char buf[48];
-  drawHeader("Claude", "usage");
-
-  setRole(F_HUGE);
-  if (timeOk()) fmtClock(buf, sizeof(buf), nowLocal());
-  else snprintf(buf, sizeof(buf), "--:--");
-  drawCenter(buf, W / 2, 104, isStale() ? COL_GREY : COL_TEXT);
-
-  setRole(F_SUB);
-  if (timeOk()) {
-    time_t tt = nowLocal();
-    struct tm tm;
-    gmtime_r(&tt, &tm);
-    snprintf(buf, sizeof(buf), "%s %d %s", DAYS_LONG[tm.tm_wday], tm.tm_mday, MONTHS[tm.tm_mon]);
-    drawCenter(buf, W / 2, 130, COL_DIM);
-  }
-
-  // Résumé du quota
-  setRole(F_BODY);
-  if (st.five.used >= 0 && st.week.used >= 0) snprintf(buf, sizeof(buf), "5 h %d%%  -  semaine %d%%", st.five.used, st.week.used);
-  else snprintf(buf, sizeof(buf), "quota inconnu");
-  drawCenter(buf, W / 2, 152, isStale() ? COL_GREY : COL_ACCENT);
-}
-
-// ---------------- Vue 4 : crédits ElevenLabs ----------------
+// ---------------- Crédits ElevenLabs ----------------
 // Milliers lisibles : 19983 -> « 19 983 »
 static void fmtThousands(char *out, size_t n, int32_t v) {
   if (v >= 1000000) snprintf(out, n, "%ld %03ld %03ld", (long)(v / 1000000), (long)(v / 1000 % 1000), (long)(v % 1000));
@@ -710,53 +634,74 @@ static void fmtThousands(char *out, size_t n, int32_t v) {
   else snprintf(out, n, "%ld", (long)v);
 }
 
-static void drawElevenView() {
-  char buf[48], a[16], b[16], rs[16];
-  drawHeader("ElevenLabs", "credits");
+// Crédits sous forme de jauge, repère de rythme sur une période mensuelle
+// (~30 jours avant le reset). Faux tant que le solde est inconnu.
+static bool elevenGauge(Gauge &g, float &frac) {
+  if (!el.have || el.used < 0 || el.limit <= 0) return false;
+  g = { (int)((int64_t)el.used * 100 / el.limit), el.reset };
+  frac = windowFraction(g, 30 * 24);
+  return true;
+}
 
-  const bool ok = el.have && el.used >= 0 && el.limit > 0;
-  if (!ok) {
-    setRole(F_SUB);
-    drawCenter(el.have ? "solde indisponible" : "non configure", W / 2, 90, COL_GREY);
-    setRole(F_BODY);
-    if (!el.have) drawCenter("cle API dans secrets.h", W / 2, 116, COL_DIM);
-    else if (el.err[0]) drawCenter(el.err, W / 2, 116, COL_WARN);
-    return;
-  }
-
-  const int32_t left = el.limit > el.used ? el.limit - el.used : 0;
-  const int usedPct = (int)((int64_t)el.used * 100 / el.limit);
-  // Repère de rythme sur une période mensuelle (~30 jours avant le reset)
-  Gauge g = { usedPct, el.reset };
-  const float frac = windowFraction(g, 30 * 24);
+// ---------------- Vue Claude, versions 3 et 4 : Claude et ElevenLabs ----------------
+// Trois jauges compactes : libellé et reset sur une ligne, pourcentage à droite
+static void drawMiniGauge(int16_t top, const char *label, const Gauge &g, float frac, const char *note) {
   const uint16_t col = isStale() ? COL_GREY : gaugeColor(g, frac);
-
+  char buf[24];
   setRole(F_LABEL);
-  drawLeft("RESTANTS", MX, 50, COL_DIM);
-  setRole(F_BIG);
-  fmtThousands(buf, sizeof(buf), left);
-  drawLeft(buf, MX, 92, isStale() ? COL_GREY : COL_TEXT);
+  drawLeft(label, MX, top + 13, COL_DIM);
+  const int16_t lw = textWidth(label);
   setRole(F_VALUE);
-  snprintf(buf, sizeof(buf), "%d%%", 100 - usedPct);
-  drawRight(buf, W - MX, 92, col);
+  if (g.used >= 0) snprintf(buf, sizeof(buf), "%d%%", g.used);
+  else snprintf(buf, sizeof(buf), "--");
+  drawRight(buf, W - MX, top + 16, g.used >= 0 ? col : COL_GREY);
+  const int16_t vw = textWidth(buf);
+  setRole(F_SMALL);
+  if (note[0] && MX + lw + 8 + textWidth(note) < W - MX - vw - 8) drawLeft(note, MX + lw + 8, top + 13, COL_DIM);
+  drawBar(MX, top + 21, W - 2 * MX, 9, g, frac, col);
+}
 
-  drawBar(MX, 102, W - 2 * MX, 16, g, frac, col);
+static void drawClaudeElevenView() {
+  char buf[24];
+  drawHeader("Claude", "+ ElevenLabs");
+  buf[0] = 0;
+  if (st.five.reset && timeOk()) fmtReset(buf, sizeof(buf), st.five.reset);
+  drawMiniGauge(32, "SESSION 5 H", st.five, windowFraction(st.five, 5), buf);
+  buf[0] = 0;
+  if (st.week.reset && timeOk()) fmtReset(buf, sizeof(buf), st.week.reset);
+  drawMiniGauge(72, "SEMAINE", st.week, windowFraction(st.week, 168), buf);
 
-  setRole(F_BODY);
-  rs[0] = 0;
-  if (el.reset) {
-    time_t tr = el.reset;
-    struct tm r;
-    gmtime_r(&tr, &r);
-    snprintf(rs, sizeof(rs), "reset %d/%02d", r.tm_mday, r.tm_mon + 1);
-    drawRight(rs, W - MX, 138, COL_DIM);
+  Gauge g = { -1, 0 };
+  float frac = -1;
+  buf[0] = 0;
+  if (elevenGauge(g, frac)) {
+    char n[16];
+    fmtThousands(n, sizeof(n), el.limit - el.used > 0 ? el.limit - el.used : 0);
+    snprintf(buf, sizeof(buf), "%s restants", n);
+  } else {
+    snprintf(buf, sizeof(buf), "%s", el.have ? "indisponible" : "non configure");
   }
-  fmtThousands(a, sizeof(a), el.used);
-  fmtThousands(b, sizeof(b), el.limit);
-  snprintf(buf, sizeof(buf), "%s / %s utilises", a, b);
-  // Police pixel plus large : on retire le mot si les deux textes se chevauchent
-  if (textWidth(buf) + textWidth(rs) + 10 > W - 2 * MX) snprintf(buf, sizeof(buf), "%s/%s", a, b);
-  drawLeft(buf, MX, 138, COL_DIM);
+  drawMiniGauge(112, "ELEVENLABS", g, frac, buf);
+}
+
+// Gros chiffres sur trois colonnes
+static void drawBigElevenView() {
+  char n[24];
+  drawHeader("Claude", "+ ElevenLabs");
+  canvas.drawFastVLine(W / 3, 40, 112, COL_TRACK);
+  canvas.drawFastVLine(2 * W / 3, 40, 112, COL_TRACK);
+  resetNote(n, sizeof(n), st.five);
+  drawBigColumn(W / 6, 42, F_VALUE, "5 H", st.five, windowFraction(st.five, 5), n);
+  resetNote(n, sizeof(n), st.week);
+  drawBigColumn(W / 2, 42, F_VALUE, "SEMAINE", st.week, windowFraction(st.week, 168), n);
+  Gauge g = { -1, 0 };
+  float frac = -1;
+  if (elevenGauge(g, frac)) {
+    fmtThousands(n, sizeof(n), el.limit - el.used > 0 ? el.limit - el.used : 0);
+  } else {
+    snprintf(n, sizeof(n), "%s", el.have ? "indispo." : "non configure");
+  }
+  drawBigColumn(5 * W / 6, 42, F_VALUE, "ELEVEN", g, frac, n);
 }
 
 // ---------------- Vue 5 : réseau ----------------
@@ -921,7 +866,6 @@ static Pomo pomoState() {
 }
 
 static void showToast(const char *msg);  // défini plus bas, avec le bouton
-static void fitText(char *s, size_t cap, int16_t maxW);
 
 static void drawPomodoroView() {
   char buf[40];
@@ -1310,13 +1254,13 @@ static void drawWaterView() {
   const uint16_t blue = c565(40, 140, 230);
   waterRollDay(nowLocal());
   snprintf(buf, sizeof(buf), "objectif %d.%d L", WATER_GOAL_ML / 1000, WATER_GOAL_ML % 1000 / 100);
-  drawHeader("Eau", waterActive() ? "c'est l'heure !" : buf);
+  drawHeader("Eau", buf);
 
   // Quantité bue en grand, l'objectif à côté
   const uint32_t ml = (uint32_t)waterGlasses * WATER_GLASS_ML;
   setRole(F_BIG);
   snprintf(buf, sizeof(buf), "%lu.%02lu", (unsigned long)(ml / 1000), (unsigned long)(ml % 1000 / 10));
-  drawLeft(buf, MX, 84, waterActive() ? blue : COL_TEXT);
+  drawLeft(buf, MX, 84, COL_TEXT);
   const int16_t bw = textWidth(buf);
   setRole(F_LABEL);
   drawLeft("L", MX + bw + 6, 84, COL_DIM);
@@ -1339,6 +1283,63 @@ static void drawWaterView() {
   setRole(F_LABEL);
   snprintf(buf, sizeof(buf), "%lu%%", (unsigned long)(ml * 100 / WATER_GOAL_ML));
   drawCenter(buf, bx + bwid / 2, by + bh / 2 + 6, COL_TEXT);
+}
+
+// ---------------- Rappel d'eau ----------------
+// Écran bleu, dessins et textes en blanc, sur le principe de l'annonce de
+// commande : grand verre à gauche, message à droite, barre du temps restant.
+const uint16_t WATER_BLUE = c565(22, 112, 214), WATER_DEEP = c565(14, 80, 170);
+
+static void drawWaterAlert() {
+  char buf[40];
+  canvas.fillScreen(WATER_BLUE);
+  // Bulles en fond, en bleu plus soutenu
+  for (int16_t y = 10; y < H; y += 18)
+    for (int16_t x = 10 + (y / 18 % 2) * 9; x < W; x += 18) canvas.drawCircle(x, y, 2, WATER_DEEP);
+
+  // Grand verre : bords épais, eau ondulée, goutte qui tombe dedans
+  const int16_t gx = 26, gy = 46, wt = 80, wb = 58, gh = 96, dx = (wt - wb) / 2;
+  const int16_t lvl = gy + gh * 2 / 5;  // surface de l'eau
+  canvas.fillRect(gx + 8, gy + 4, wt - 16, gh - 6, WATER_BLUE);  // efface les bulles derrière le verre
+  for (int16_t y = lvl; y < gy + gh; y++) {
+    const int16_t inset = (int32_t)dx * (y - gy) / gh;
+    canvas.drawFastHLine(gx + inset + 3, y, wt - 2 * inset - 6, COL_WHITE);
+  }
+  // Vague à la surface : creux bleus le long de la ligne d'eau
+  for (int16_t x = gx + 6; x < gx + wt - 6; x++) {
+    const int16_t a = (int16_t)(3.5f + 3.5f * sinf((x - gx) * 0.22f));
+    canvas.drawFastVLine(x, lvl, a, WATER_BLUE);
+  }
+  for (int8_t t = 0; t < 4; t++) {
+    canvas.drawLine(gx + t, gy, gx + dx + t, gy + gh, COL_WHITE);
+    canvas.drawLine(gx + wt - t, gy, gx + dx + wb - t, gy + gh, COL_WHITE);
+    canvas.drawFastHLine(gx + dx, gy + gh - t, wb + 1, COL_WHITE);
+  }
+  // Goutte : disque surmonté d'une pointe
+  const int16_t cx = gx + wt / 2, cy = 30;
+  fillCircleAA(cx, cy, 9, COL_WHITE);
+  canvas.fillTriangle(cx - 8, cy - 4, cx + 8, cy - 4, cx, cy - 20, COL_WHITE);
+  fillCircleAA(cx - 3, cy + 1, 2.5f, WATER_BLUE);  // reflet
+
+  pxSize = 0;
+  const int16_t tx = 132;
+  canvas.setTextSize(1);
+  canvas.setFont(&FreeSansBold24pt7b);
+  snprintf(buf, sizeof(buf), "%d ml", WATER_GLASS_ML);
+  drawLeft(buf, tx, 60, COL_WHITE);
+  canvas.setFont(&FreeSansBold12pt7b);
+  drawLeft("A BOIRE !", tx, 88, COL_WHITE);
+
+  canvas.setFont(&FreeSansBold9pt7b);
+  snprintf(buf, sizeof(buf), "%u / %u verres", waterGlasses, WATER_TARGET);
+  drawLeft(buf, tx, 120, COL_WHITE);
+  canvas.setFont(&FreeSans9pt7b);
+  drawLeft("Appui : verre bu", tx, 142, COL_WHITE);
+
+  // Cadre blanc et barre du temps restant
+  for (int8_t i = 0; i < 4; i++) canvas.drawRect(i, i, W - 2 * i, H - 2 * i, COL_WHITE);
+  const uint32_t left = waterActive() ? waterUntil - millis() : 0;
+  canvas.fillRect(4, H - 10, (int32_t)(W - 8) * left / WATER_SHOW_MS, 6, COL_WHITE);
 }
 
 // Déclenche le rappel quand on est en retard sur le rythme, dans la plage horaire
@@ -1409,26 +1410,26 @@ static void render() {
   if (sleeping) return;
   Guard g;  // la tâche réseau ne modifie rien pendant le dessin
   dirty = false;
-  const bool water = waterActive() && !orderActive();  // rappel : vue Eau par-dessus
-  if (orderActive() || (view == VIEW_SIAM && !water)) {  // identité du site, quel que soit le thème
+  // Annonces plein écran, puis vue PALais SIAM : couleurs fixes, quel que soit le thème
+  if (orderActive() || waterActive() || view == VIEW_SIAM) {
     if (orderActive()) drawOrderView();
+    else if (waterActive()) drawWaterAlert();
     else drawSiamView();
     tft.drawRGBBitmap(0, 0, canvas.getBuffer(), W, H);
     return;
   }
   canvas.fillScreen(COL_BG);
   if (T->fx == FX_RAIN) drawRain();
-  if (water) drawWaterView();
-  else if (menuOpen) drawMenu();
+  if (menuOpen) drawMenu();
   else switch (view) {
     case VIEW_HOME: drawHomeView(); break;
     case VIEW_CLAUDE:
       if (claudeStyle == 1) drawBigView();
-      else if (claudeStyle == 2) drawClockView();
+      else if (claudeStyle == 2) drawClaudeElevenView();
+      else if (claudeStyle == 3) drawBigElevenView();
       else drawGaugesView();
       break;
     case VIEW_WATER: drawWaterView(); break;
-    case VIEW_ELEVEN: drawElevenView(); break;
     case VIEW_NET: drawNetView(); break;
     case VIEW_POMODORO: drawPomodoroView(); break;
     case VIEW_MARKET: drawMarketView(); break;

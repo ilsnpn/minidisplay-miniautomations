@@ -96,7 +96,7 @@
           </tbody>
         </table>
       </div>
-      <p>Tout l'affichage est commun : thèmes, jauges, horloge, Pomodoro, bourse, couleurs. Seule la manière d'obtenir les données change, ce qui a permis de reprendre le firmware de la V1 presque tel quel.</p>
+      <p>Tout l'affichage est commun : thèmes, jauges, Pomodoro, bourse, couleurs. Seule la manière d'obtenir les données change, ce qui a permis de reprendre le firmware de la V1 presque tel quel.</p>
     </section>
 
     <section id="chaine">
@@ -266,7 +266,7 @@ if (code == 200 &amp;&amp; at) {
           <thead><tr><th>Vue</th><th>Appui long</th></tr></thead>
           <tbody>
             <tr><td>Home</td><td>Thème suivant</td></tr>
-            <tr><td>Claude</td><td>Version 1 (jauges), 2 (gros chiffres) ou 3 (horloge)</td></tr>
+            <tr><td>Claude</td><td>Version 1 (jauges), 2 (gros chiffres), 3 (jauges + ElevenLabs) ou 4 (gros chiffres + ElevenLabs)</td></tr>
             <tr><td>Réseau</td><td>Un réseau, Automatique, Redémarrer, Veille</td></tr>
             <tr><td>Pomodoro</td><td>Recommencer</td></tr>
             <tr><td>Action</td><td>Le cours affiché : IART par défaut, BTC, ETH (liste <code>MARKET_SYMBOLS</code>)</td></tr>
@@ -279,7 +279,11 @@ if (code == 200 &amp;&amp; at) {
         <img src="assets/themes/claude-eau.png" width="640" height="344" alt="Vue Eau : 0,75 L bus, trois verres sur six, bouteille remplie à 50 %" loading="lazy" style="width:100%;max-width:480px;height:auto;border-radius:10px">
         <figcaption>La vue Home reprend le logo du site : M D M A se déploient en MiniDisplay MiniAutomations. La vue Eau suit l'objectif du jour.</figcaption>
       </figure>
-      <p><strong>Rappel d'eau.</strong> Objectif 1,5 L par jour, en six verres de 25 cl, de 9 h à 19 h : un verre toutes les 1 h 40. Le rappel ne sonne que si l'on est en retard sur ce rythme : la vue Eau passe alors par-dessus la vue en cours, la LED clignote en bleu, et un appui note le verre. Sans réponse, le rappel s'efface au bout d'une minute et revient 20 minutes plus tard. Tout se règle dans <code>secrets.h</code> (<code>WATER_GOAL_ML</code>, <code>WATER_GLASS_ML</code>, <code>WATER_FROM_H</code>, <code>WATER_TO_H</code>).</p>
+      <p><strong>Rappel d'eau.</strong> Objectif 1,5 L par jour, en six verres de 25 cl, de 9 h à 19 h : un verre toutes les 1 h 40. Le rappel ne sonne que si l'on est en retard sur ce rythme : un écran bleu passe alors par-dessus la vue en cours, avec une barre qui défile pendant la minute d'affichage, la LED clignote en bleu, et un appui note le verre. Sans réponse, le rappel s'efface au bout d'une minute et revient 20 minutes plus tard. Tout se règle dans <code>secrets.h</code> (<code>WATER_GOAL_ML</code>, <code>WATER_GLASS_ML</code>, <code>WATER_FROM_H</code>, <code>WATER_TO_H</code>).</p>
+      <figure class="diagram">
+        <img src="assets/themes/annonce-water.png" width="640" height="344" alt="Rappel d'eau : écran bleu, grand verre et goutte en blanc, 250 ml à boire, 3 verres sur 6, barre de temps en bas" loading="lazy" style="width:100%;max-width:480px;height:auto;border-radius:10px">
+        <figcaption>Le rappel, sur le principe de l'annonce de commande : couleurs fixes quel que soit le thème.</figcaption>
+      </figure>
       <div class="callout info">
         <b>Veille plutôt qu'arrêt</b>
         <p>La carte est alimentée par l'USB : le firmware ne peut pas la couper. La veille éteint l'écran, la LED et le Wi-Fi, et un appui la réveille. Une veille profonde est impossible ici, car le bouton BOOT (GPIO9) n'est pas une broche capable de réveiller la puce depuis ce mode.</p>

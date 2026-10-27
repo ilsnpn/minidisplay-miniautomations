@@ -10,8 +10,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 OUT = ROOT / 'site' / 'assets' / 'themes'
-THEMES = ['matrix', 'msdos', 'win98', 'ubuntu', 'claude', 'macos', 'aperture']  # ordre de THEMES[] dans le .ino
-VIEWS = ['home', 'jauges', 'chiffres', 'horloge', 'elevenlabs', 'reseau', 'pomodoro', 'palais-siam', 'bourse', 'eau']  # vues du .ino, Claude en trois versions
+THEMES = ['matrix', 'ubuntu', 'claude', 'macos', 'aperture']  # ordre de THEMES[] dans le .ino
+VIEWS = ['home', 'jauges', 'chiffres', 'claude-eleven', 'chiffres-eleven', 'reseau', 'pomodoro', 'palais-siam', 'bourse', 'eau']  # vues du .ino, Claude en quatre versions
 
 
 def zig():
@@ -49,6 +49,9 @@ def main():
         img.save(OUT / f'{THEMES[t]}-{VIEWS[v]}.png', optimize=True)
     menu = Image.open(build / 'menu.ppm')
     menu.resize((menu.width * 2, menu.height * 2), Image.NEAREST).save(OUT / 'claude-reseau-menu.png', optimize=True)
+    for name in ['order', 'water']:  # annonces plein écran, communes à tous les thèmes
+        img = Image.open(build / f'{name}.ppm')
+        img.resize((img.width * 2, img.height * 2), Image.NEAREST).save(OUT / f'annonce-{name}.png', optimize=True)
     print(f'{len(THEMES) * len(VIEWS)} images dans {OUT.relative_to(ROOT)}')
 
 
