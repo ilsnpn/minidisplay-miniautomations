@@ -176,7 +176,7 @@ static volatile bool marketChanged = false;  // à relever tout de suite par la 
 #define WATER_GOAL_ML 1500
 #endif
 #ifndef WATER_GLASS_ML
-#define WATER_GLASS_ML 250
+#define WATER_GLASS_ML 200
 #endif
 #ifndef WATER_FROM_H
 #define WATER_FROM_H 9
@@ -1288,19 +1288,16 @@ static void drawWaterView() {
 // ---------------- Rappel d'eau ----------------
 // Écran bleu, dessins et textes en blanc, sur le principe de l'annonce de
 // commande : grand verre à gauche, message à droite, barre du temps restant.
-const uint16_t WATER_BLUE = c565(22, 112, 214), WATER_DEEP = c565(14, 80, 170);
+// Fond bleu Klein (IKB, le bleu de l'artiste niçois), uni.
+const uint16_t WATER_BLUE = c565(0, 47, 167);
 
 static void drawWaterAlert() {
   char buf[40];
   canvas.fillScreen(WATER_BLUE);
-  // Bulles en fond, en bleu plus soutenu
-  for (int16_t y = 10; y < H; y += 18)
-    for (int16_t x = 10 + (y / 18 % 2) * 9; x < W; x += 18) canvas.drawCircle(x, y, 2, WATER_DEEP);
 
   // Grand verre : bords épais, eau ondulée, goutte qui tombe dedans
   const int16_t gx = 26, gy = 46, wt = 80, wb = 58, gh = 96, dx = (wt - wb) / 2;
   const int16_t lvl = gy + gh * 2 / 5;  // surface de l'eau
-  canvas.fillRect(gx + 8, gy + 4, wt - 16, gh - 6, WATER_BLUE);  // efface les bulles derrière le verre
   for (int16_t y = lvl; y < gy + gh; y++) {
     const int16_t inset = (int32_t)dx * (y - gy) / gh;
     canvas.drawFastHLine(gx + inset + 3, y, wt - 2 * inset - 6, COL_WHITE);
@@ -1336,10 +1333,9 @@ static void drawWaterAlert() {
   canvas.setFont(&FreeSans9pt7b);
   drawLeft("Appui : verre bu", tx, 142, COL_WHITE);
 
-  // Cadre blanc et barre du temps restant
-  for (int8_t i = 0; i < 4; i++) canvas.drawRect(i, i, W - 2 * i, H - 2 * i, COL_WHITE);
+  // Barre du temps restant
   const uint32_t left = waterActive() ? waterUntil - millis() : 0;
-  canvas.fillRect(4, H - 10, (int32_t)(W - 8) * left / WATER_SHOW_MS, 6, COL_WHITE);
+  canvas.fillRect(0, H - 6, (int32_t)W * left / WATER_SHOW_MS, 6, COL_WHITE);
 }
 
 // Déclenche le rappel quand on est en retard sur le rythme, dans la plage horaire

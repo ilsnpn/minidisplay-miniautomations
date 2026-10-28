@@ -70,7 +70,7 @@ int main(int argc, char **argv) {
   net.upSinceMs = g_millis - (2 * 3600 + 14 * 60) * 1000UL;
   for (uint8_t i = 0; i < SRC_COUNT; i++) srcs[i] = { true, now - 60, false };
 
-  waterGlasses = 3;  // 0,75 L sur 1,5 L
+  waterGlasses = 3;  // 0,6 L sur 1,5 L
   waterDay = now / 86400;
   pomoEnter = g_millis - POMO_ARM_MS - (6 * 60 + 36) * 1000UL;  // Pomodoro : 18:24 restantes
   for (uint8_t t = 0; t < THEME_COUNT; t++) {
