@@ -72,19 +72,14 @@ static constexpr uint16_t c565(uint8_t r, uint8_t g, uint8_t b) {
   return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
 }
 
-enum Header : uint8_t { H_PLAIN, H_UBUNTU, H_MAC, H_APERTURE };
+enum Header : uint8_t { H_PLAIN, H_MAC, H_APERTURE };
 enum BarStyle : uint8_t { B_ROUND, B_SEGMENT };
-enum Fx : uint8_t { FX_NONE, FX_SCAN, FX_RAIN };
+enum Fx : uint8_t { FX_NONE, FX_SCAN, FX_PIXEL };
 
+// Matrix et Ubuntu ne sont plus compilés : voir firmware/themes_archives/.
 // nom, fond, piste, texte, atténué, accent, gris, alerte, barre titre fond/texte,
 // jauge ok / en avance / en retard, police pixel, en-tête, barres, effet
 const Theme THEMES[] = {
-  { "Matrix", c565(0, 0, 0), c565(0, 38, 10), c565(0, 255, 65), c565(10, 143, 46), c565(184, 255, 201),
-    c565(10, 110, 36), c565(255, 77, 77), 0, 0,
-    { 0, 255, 65 }, { 255, 77, 77 }, { 10, 143, 46 }, true, H_PLAIN, B_SEGMENT, FX_RAIN },
-  { "Ubuntu", c565(48, 10, 36), c565(94, 39, 80), c565(255, 255, 255), c565(179, 155, 171), c565(233, 84, 32),
-    c565(122, 106, 117), c565(252, 175, 62), c565(17, 17, 17), c565(255, 255, 255),
-    { 233, 84, 32 }, { 239, 41, 41 }, { 138, 226, 52 }, false, H_UBUNTU, B_ROUND, FX_NONE },
   { "Claude Code", c565(10, 10, 14), c565(40, 42, 52), c565(235, 235, 240), c565(140, 145, 158), c565(217, 119, 87),
     c565(110, 115, 125), c565(235, 150, 20), 0, 0,
     { 217, 119, 87 }, { 229, 72, 77 }, { 177, 173, 161 }, false, H_PLAIN, B_ROUND, FX_NONE },
@@ -94,9 +89,14 @@ const Theme THEMES[] = {
   { "Aperture Science", c565(0, 0, 0), c565(42, 22, 0), c565(255, 154, 0), c565(154, 92, 0), c565(255, 197, 107),
     c565(110, 66, 0), c565(255, 59, 31), 0, 0,
     { 255, 154, 0 }, { 255, 59, 31 }, { 39, 167, 255 }, true, H_APERTURE, B_SEGMENT, FX_SCAN },
+  // Pixel : noir et blanc, gros carrés. Ce thème a son propre dessin (pixel_theme.h) :
+  // seules les couleurs de la LED (ok, en retard) servent ici.
+  { "Pixel", c565(0, 0, 0), c565(0, 0, 0), c565(255, 255, 255), c565(255, 255, 255), c565(255, 255, 255),
+    c565(255, 255, 255), c565(255, 255, 255), 0, 0,
+    { 255, 255, 255 }, { 255, 255, 255 }, { 120, 120, 120 }, false, H_PLAIN, B_ROUND, FX_PIXEL },
 };
 #define THEME_COUNT (sizeof(THEMES) / sizeof(THEMES[0]))
-#define THEME_DEFAULT 2  // Claude Code
+#define THEME_DEFAULT 0  // Claude Code
 
 static uint8_t themeIndex = THEME_DEFAULT;
 static const Theme *T = &THEMES[THEME_DEFAULT];
@@ -400,14 +400,6 @@ static void drawHeader(const char *title, const char *sub) {
   }
 
   switch (T->header) {
-    case H_UBUNTU:  // barre supérieure GNOME
-      canvas.fillRect(0, 0, W, 24, T->barBg);
-      setRole(F_LABEL);
-      drawLeft(t, MX, 17, T->barFg);
-      drawLeft(s, MX + textWidth(t) + 5, 17, COL_ACCENT);
-      statusDot(W - MX - 6, 12, 5);
-      break;
-
     case H_MAC:  // barre de titre et feux tricolores
       canvas.fillRect(0, 0, W, 26, T->barBg);
       canvas.drawFastHLine(0, 26, W, c565(200, 200, 204));  // filet de séparation
@@ -528,25 +520,6 @@ static void drawFooter() {
 }
 
 // ---------------- Effets d'écran ----------------
-// Pluie de caractères Matrix en fond, renouvelée toutes les 5 s
-static void drawRain() {
-  uint32_t seed = timeOk() ? nowLocal() / 5 : millis() / 5000;
-  setRole(F_SMALL);
-  for (int16_t x = 2; x < W; x += 12) {
-    seed = seed * 1103515245u + 12345u;
-    const int16_t len = 4 + (seed >> 16) % 10;
-    const int16_t y0 = (int16_t)((seed >> 8) % (H / 9)) * 9 - 40;
-    for (int16_t i = 0; i < len; i++) {
-      seed = seed * 1103515245u + 12345u;
-      const int16_t y = y0 + i * 9;
-      if (y < 0 || y > H - 8) continue;
-      const uint8_t k = 22 + 48 * i / len;  // la tête de colonne est la plus claire
-      const uint16_t c = c565(0, k, k / 4);
-      canvas.drawChar(x, y, 33 + (seed >> 16) % 90, c, c, 1);  // fond = couleur : transparent
-    }
-  }
-}
-
 // Lignes de balayage d'écran cathodique : une ligne sur trois assombrie de moitié
 static void drawScanlines() {
   uint16_t *b = canvas.getBuffer();
@@ -867,18 +840,21 @@ static Pomo pomoState() {
 
 static void showToast(const char *msg);  // défini plus bas, avec le bouton
 
-static void drawPomodoroView() {
-  char buf[40];
-  const Pomo p = pomoState();
-  drawHeader("Pomodoro", p.armed ? "pret" : (p.work ? "travail" : "pause"));  // la phase, dans l'en-tête
-
-  // Changement de phase : message et clignotement de la LED
+// Changement de phase : message et clignotement de la LED
+static void pomoTrackPhase(const Pomo &p) {
   const int8_t phase = p.armed ? -1 : (int8_t)p.work;
   if (pomoLastPhase >= 0 && phase >= 0 && phase != pomoLastPhase) {
     showToast(p.work ? "Au travail !" : "Pause !");
     pomoAlertUntil = millis() + POMO_ALERT_MS;
   }
   pomoLastPhase = phase;
+}
+
+static void drawPomodoroView() {
+  char buf[40];
+  const Pomo p = pomoState();
+  drawHeader("Pomodoro", p.armed ? "pret" : (p.work ? "travail" : "pause"));  // la phase, dans l'en-tête
+  pomoTrackPhase(p);
 
   const RGB k = p.work ? T->ok : T->behind;
   const uint16_t col = p.armed ? COL_DIM : c565(k.r, k.g, k.b);
@@ -957,8 +933,8 @@ static void drawMarketView() {
     canvas.setTextColor(COL_DIM);
     canvas.setCursor(W - MX - 56, gy + 2);
     canvas.print("haut");
-    canvas.setCursor(W - MX - 56, gy + 12);
     canvas.setTextColor(COL_TEXT);
+    canvas.setCursor(W - MX - 56, gy + 12);
     canvas.print(mk.high);
     canvas.setTextColor(COL_DIM);
     canvas.setCursor(W - MX - 56, gy + gh - 18);
@@ -1402,6 +1378,8 @@ static void drawHomeView() {
   statusDot(W - MX - 6, 127, 5);
 }
 
+#include "pixel_theme.h"  // thème Pixel : ses vues sur une grille de gros carrés
+
 static void render() {
   if (sleeping) return;
   Guard g;  // la tâche réseau ne modifie rien pendant le dessin
@@ -1414,8 +1392,12 @@ static void render() {
     tft.drawRGBBitmap(0, 0, canvas.getBuffer(), W, H);
     return;
   }
+  if (T->fx == FX_PIXEL) {  // vues dédiées, sans en-tête ni pied de page
+    drawPixelScreen();
+    tft.drawRGBBitmap(0, 0, canvas.getBuffer(), W, H);
+    return;
+  }
   canvas.fillScreen(COL_BG);
-  if (T->fx == FX_RAIN) drawRain();
   if (menuOpen) drawMenu();
   else switch (view) {
     case VIEW_HOME: drawHomeView(); break;
@@ -1432,7 +1414,7 @@ static void render() {
     default: drawGaugesView(); break;
   }
   drawFooter();
-  if (T->fx != FX_NONE) drawScanlines();
+  if (T->fx == FX_SCAN) drawScanlines();
   tft.drawRGBBitmap(0, 0, canvas.getBuffer(), W, H);
 }
 
@@ -1481,7 +1463,7 @@ static void nextView() {
 static void nextTheme() {
   themeIndex = (themeIndex + 1) % THEME_COUNT;
   T = &THEMES[themeIndex];
-  prefs.putUChar("theme", themeIndex);
+  prefs.putString("themeName", T->name);
   char msg[32];
   snprintf(msg, sizeof(msg), "Theme %s", T->name);
   showToast(msg);
@@ -1661,7 +1643,12 @@ void setup() {
   claudeStyle = prefs.getUChar("cst", 0) % CLAUDE_STYLES;
   waterGlasses = prefs.getUChar("wgl", 0);
   waterDay = prefs.getUInt("wday", 0);
-  themeIndex = prefs.getUChar("theme", THEME_DEFAULT) % THEME_COUNT;
+  // Thème mémorisé par son nom : la liste a changé de taille, un indice ne suffirait plus
+  themeIndex = THEME_DEFAULT;
+  char themeName[24] = "";
+  prefs.getString("themeName", themeName, sizeof(themeName));
+  for (uint8_t i = 0; i < THEME_COUNT; i++)
+    if (!strcmp(themeName, THEMES[i].name)) themeIndex = i;
   T = &THEMES[themeIndex];
   blIndex = prefs.getUChar("bl", 0) % (sizeof(BL_LEVELS) / sizeof(BL_LEVELS[0]));
   marketSel = prefs.getUChar("mkt", 0) % MARKET_COUNT;

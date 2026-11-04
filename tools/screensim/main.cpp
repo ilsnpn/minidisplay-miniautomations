@@ -98,6 +98,10 @@ int main(int argc, char **argv) {
   render();
   snprintf(p, sizeof(p), "%s/menu.ppm", out);
   dump(p);
+  T = &THEMES[THEME_COUNT - 1];  // même menu, thème Pixel
+  render();
+  snprintf(p, sizeof(p), "%s/menu_pixel.ppm", out);
+  dump(p);
   menuOpen = false;
   // Annonce d'une commande PALais SIAM, 1,5 s après réception
   orderCount = 1;
