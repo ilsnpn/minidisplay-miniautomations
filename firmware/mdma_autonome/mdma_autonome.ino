@@ -378,20 +378,15 @@ static void statusDot(int16_t cx, int16_t cy, int16_t r) {
   fillCircleAA(cx, cy, r, isStale() ? COL_GREY : levelColor(st.level));
 }
 
-// Logo d'Aperture Science : un diaphragme à huit lames
-static void apertureLogo(int16_t cx, int16_t cy, int16_t r) {
-  fillCircleAA(cx, cy, r, COL_TEXT);
-  fillCircleAA(cx, cy, r * 0.4f, COL_BG);
-  for (int i = 0; i < 8; i++) {
-    const float a = i * PI / 4, b = a + 1.0f;
-    canvas.drawLine(cx + cosf(a) * r * 0.4f, cy + sinf(a) * r * 0.4f,
-                    cx + cosf(b) * (r + 1), cy + sinf(b) * (r + 1), COL_BG);
-  }
-}
+// Thèmes sans en-tête : les vues peuvent occuper toute la hauteur
+// (tous sauf Pixel, qui a son propre dessin)
+static bool noHeader() { return T->fx != FX_PIXEL; }
+static bool ownLayout = false;  // la vue a placé son contenu sur toute la hauteur : pas de recentrage
 
 // En-tête : titre et sous-titre habillés selon le thème, plus la pastille d'état
 static void drawHeader(const char *title, const char *sub) {
-  char t[24], s[24], buf[48];
+  if (noHeader()) return;  // en-tête vide : le contenu prend toute la hauteur
+  char t[24], s[24];
   snprintf(t, sizeof(t), "%s", title);
   snprintf(s, sizeof(s), "%s", sub);
   if (T->pixel) {
@@ -400,25 +395,8 @@ static void drawHeader(const char *title, const char *sub) {
   }
 
   switch (T->header) {
-    case H_MAC:  // barre de titre et feux tricolores
-      canvas.fillRect(0, 0, W, 26, T->barBg);
-      canvas.drawFastHLine(0, 26, W, c565(200, 200, 204));  // filet de séparation
-      fillCircleAA(16, 13, 6, c565(255, 95, 87));
-      fillCircleAA(34, 13, 6, c565(254, 188, 46));
-      fillCircleAA(52, 13, 6, c565(40, 200, 64));
-      setRole(F_LABEL);
-      snprintf(buf, sizeof(buf), "%s %s", t, s);
-      drawCenter(buf, W / 2, 18, T->barFg);
-      statusDot(W - MX - 6, 13, 5);
-      break;
-
-    case H_APERTURE:  // logo, puis titre façon terminal d'enrichissement
-      apertureLogo(MX + 10, 13, 10);
-      setRole(F_TITLE);
-      drawLeft(t, MX + 26, 21, COL_ACCENT);
-      drawLeft(s, MX + 26 + textWidth(t) + 8, 21, COL_DIM);
-      canvas.drawFastHLine(MX, 28, W - 2 * MX, COL_DIM);
-      statusDot(W - MX - 6, 13, 6);
+    case H_MAC:       // en-tête vide : ni barre, ni titre
+    case H_APERTURE:  // en-tête vide : ni logo, ni titre
       break;
 
     default: {  // H_PLAIN : titre en couleur d'accent, sous-titre atténué
@@ -639,10 +617,13 @@ static void drawClaudeElevenView() {
   drawHeader("Claude", "+ ElevenLabs");
   buf[0] = 0;
   if (st.five.reset && timeOk()) fmtReset(buf, sizeof(buf), st.five.reset);
-  drawMiniGauge(32, "SESSION 5 H", st.five, windowFraction(st.five, 5), buf);
+  const bool nh = noHeader();
+  ownLayout = nh;
+  const int16_t y0 = nh ? 10 : 32, dy = nh ? 50 : 40;  // sans en-tête : trois lignes sur toute la hauteur
+  drawMiniGauge(y0, "SESSION 5 H", st.five, windowFraction(st.five, 5), buf);
   buf[0] = 0;
   if (st.week.reset && timeOk()) fmtReset(buf, sizeof(buf), st.week.reset);
-  drawMiniGauge(72, "SEMAINE", st.week, windowFraction(st.week, 168), buf);
+  drawMiniGauge(y0 + dy, "SEMAINE", st.week, windowFraction(st.week, 168), buf);
 
   Gauge g = { -1, 0 };
   float frac = -1;
@@ -654,7 +635,7 @@ static void drawClaudeElevenView() {
   } else {
     snprintf(buf, sizeof(buf), "%s", el.have ? "indisponible" : "non configure");
   }
-  drawMiniGauge(112, "ELEVENLABS", g, frac, buf);
+  drawMiniGauge(y0 + 2 * dy, "ELEVENLABS", g, frac, buf);
 }
 
 // Gros chiffres sur trois colonnes
@@ -774,33 +755,38 @@ static void drawNetView() {
   char buf[48], dur[16];
   drawHeader("Reseau", net.up && net.current >= 0 ? WIFI_NETS[net.current].ssid : "hors ligne");
 
+  // Sans en-tête, tout remonte de 30 px et les lignes s'espacent pour remplir la hauteur
+  const bool nh = noHeader();
+  ownLayout = nh;
+  const int16_t o = nh ? -30 : 0, ipY = nh ? 82 : 102, srcY = nh ? 116 : 128, srcDy = nh ? 28 : 22;
+
   // Signal : barres, puissance en dBm et qualité
   const int bars = net.up ? max(1, signalBars(net.rssi)) : 0;
   const uint16_t sig = levelColor(bars >= 3 ? 0 : bars == 2 ? 1 : 2);
-  drawSignal(MX, 78, bars, sig);
+  drawSignal(MX, 78 + o, bars, sig);
   const int16_t tx = MX + 58;
   static const char *const QUALITY[] = { "", "faible", "moyen", "bon", "excellent" };
   if (net.up) {
     setRole(F_VALUE);
     snprintf(buf, sizeof(buf), "%d dBm", net.rssi);
-    drawLeft(buf, tx, 60, sig);
+    drawLeft(buf, tx, 60 + o, sig);
     setRole(F_BODY);
     snprintf(buf, sizeof(buf), "%s - %s", QUALITY[bars], net.forced >= 0 ? "impose" : "auto");
-    drawLeft(buf, tx, 80, COL_DIM);
+    drawLeft(buf, tx, 80 + o, COL_DIM);
 
     snprintf(buf, sizeof(buf), "IP %s", net.ip);
-    drawLeft(buf, MX, 102, COL_DIM);
+    drawLeft(buf, MX, ipY, COL_DIM);
     fmtDuration(dur, sizeof(dur), (millis() - net.upSinceMs) / 1000);
     snprintf(buf, sizeof(buf), "depuis %s", dur);
     if (textWidth(buf) + textWidth(net.ip) + 40 > W - 2 * MX) snprintf(buf, sizeof(buf), "%s", dur);
-    drawRight(buf, W - MX, 102, COL_DIM);
+    drawRight(buf, W - MX, ipY, COL_DIM);
   } else {
     setRole(F_VALUE);
-    drawLeft("Hors ligne", tx, 60, COL_WARN);
+    drawLeft("Hors ligne", tx, 60 + o, COL_WARN);
     setRole(F_BODY);
     if (net.trying >= 0) snprintf(buf, sizeof(buf), "essai de %s...", WIFI_NETS[net.trying].ssid);
     else snprintf(buf, sizeof(buf), "Wi-Fi coupe");
-    drawLeft(buf, tx, 80, COL_DIM);
+    drawLeft(buf, tx, 80 + o, COL_DIM);
   }
 
   // Une pastille par source : vert = relevé réussi, orange = dernier essai en échec,
@@ -808,7 +794,7 @@ static void drawNetView() {
   setRole(F_BODY);
   const int16_t cw = (W - 2 * MX) / 3;
   for (uint8_t i = 0; i < SRC_COUNT; i++) {
-    const int16_t x = MX + (i % 3) * cw, base = 128 + (i / 3) * 22;
+    const int16_t x = MX + (i % 3) * cw, base = srcY + (i / 3) * srcDy;
     const Source &s = srcs[i];
     if (!s.on) canvas.drawCircle(x + 5, base - 5, 4, COL_TRACK);
     else fillCircleAA(x + 5, base - 5, 4.5f, s.fail ? levelColor(1) : s.okAt ? levelColor(0) : COL_GREY);
@@ -859,13 +845,13 @@ static void drawPomodoroView() {
   const RGB k = p.work ? T->ok : T->behind;
   const uint16_t col = p.armed ? COL_DIM : c565(k.r, k.g, k.b);
 
+  // Compteur et ligne d'info, centrés dans la place disponible (sans barre de progression)
+  const bool nh = noHeader();
+  ownLayout = nh;
+  const int16_t numY = nh ? 102 : 116, infoY = nh ? 132 : 146;
   setRole(F_HUGE);
   snprintf(buf, sizeof(buf), "%02lu:%02lu", (unsigned long)(p.left / 60), (unsigned long)(p.left % 60));
-  drawCenter(buf, W / 2, 112, p.armed ? COL_DIM : COL_TEXT);
-
-  // Barre : part écoulée de la phase
-  Gauge g = { (int)(100 - p.left * 100 / p.span), 0 };
-  drawBar(MX + 30, 122, W - 2 * MX - 60, 8, g, -1, col);
+  drawCenter(buf, W / 2, numY, p.armed ? COL_DIM : COL_TEXT);
 
   setRole(F_BODY);
   if (p.armed) {
@@ -877,7 +863,7 @@ static void drawPomodoroView() {
   } else {
     snprintf(buf, sizeof(buf), "cycle %lu", (unsigned long)p.cycle);
   }
-  drawCenter(buf, W / 2, 152, col);
+  drawCenter(buf, W / 2, infoY, col);
 }
 
 // ---------------- Vue 8 : bourse ----------------
@@ -895,6 +881,11 @@ static void drawMarketView() {
     return;
   }
 
+  // Sans en-tête : tout remonte et la courbe prend la hauteur libérée
+  const bool nh = noHeader();
+  ownLayout = nh;
+  const int16_t o = nh ? -30 : 0;
+
   const uint16_t up = c565(34, 170, 90), down = c565(220, 60, 60);
   const uint16_t trend = !ok ? COL_GREY : (mk.pct >= 0 ? up : down);
 
@@ -903,21 +894,21 @@ static void drawMarketView() {
   setRole(F_VALUE);
   char pct[12];
   snprintf(pct, sizeof(pct), "%+.2f%%", mk.pct);
-  drawRight(pct, W - MX, 52, trend);
+  drawRight(pct, W - MX, 52 + o, trend);
   const int16_t pctW = textWidth(pct);
   setRole(F_BODY);
   snprintf(buf, sizeof(buf), "%s", mk.name);
   fitText(buf, sizeof(buf), W - 2 * MX - pctW - 10);
-  drawLeft(buf, MX, 50, COL_DIM);
+  drawLeft(buf, MX, 50 + o, COL_DIM);
   setRole(F_BIG);
-  drawLeft(mk.price, MX, 94, ok ? COL_TEXT : COL_GREY);
+  drawLeft(mk.price, MX, 94 + o, ok ? COL_TEXT : COL_GREY);
   const int16_t pw = textWidth(mk.price);
   setRole(F_LABEL);
-  drawLeft(mk.currency, MX + pw + 6, 94, COL_DIM);
+  drawLeft(mk.currency, MX + pw + 6, 94 + o, COL_DIM);
 
   // Courbe de la séance, plus bas et plus haut à droite
   if (mk.n >= 2) {
-    const int16_t gx = MX, gy = 104, gw = W - 2 * MX - 64, gh = 46;
+    const int16_t gx = MX, gy = 104 + o, gw = W - 2 * MX - 64, gh = nh ? 76 : 46;
     canvas.drawFastHLine(gx, gy + gh, gw, COL_TRACK);
     int16_t px = gx, py = gy + gh - mk.pts[0] * gh / 99;
     for (uint8_t i = 1; i < mk.n; i++) {
@@ -1225,6 +1216,36 @@ static void drawGlass(int16_t x, int16_t y, bool full, uint16_t blue) {
   canvas.drawFastHLine(x + dx, y + h, wb + 1, edge);
 }
 
+// Bouteille d'eau dessinée ligne par ligne : bouchon, goulot, épaules arrondies,
+// corps droit et fond arrondi. fillPx : hauteur d'eau depuis le fond.
+#define BOTTLE_H 118
+static int16_t bottleHalf(int16_t y) {  // demi-largeur extérieure à la ligne y
+  if (y < 12) return 8;                  // goulot
+  if (y < 34) {                          // épaules : quart de sinus
+    const float t = (y - 12) / 22.0f;
+    return 8 + (int16_t)(15 * sinf(t * PI / 2) + 0.5f);
+  }
+  const int16_t fromBottom = BOTTLE_H - 1 - y;
+  if (fromBottom < 6) return 23 - (6 - fromBottom) * (6 - fromBottom) / 6;  // fond arrondi
+  return 23;
+}
+
+static void drawBottle(int16_t cx, int16_t top, int16_t fillPx, uint16_t blue) {
+  canvas.fillRoundRect(cx - 10, top - 10, 21, 10, 2, COL_DIM);  // bouchon
+  for (int16_t y = 0; y < BOTTLE_H; y++) {
+    const int16_t hw = bottleHalf(y), py = top + y;
+    if (y < 2 || y >= BOTTLE_H - 2) {  // bord du haut du goulot et fond : plein
+      canvas.drawFastHLine(cx - hw, py, 2 * hw + 1, COL_DIM);
+      continue;
+    }
+    canvas.drawFastHLine(cx - hw, py, 2, COL_DIM);   // paroi gauche
+    canvas.drawFastHLine(cx + hw - 1, py, 2, COL_DIM);  // paroi droite
+    if (BOTTLE_H - 2 - y <= fillPx && hw > 4) canvas.drawFastHLine(cx - hw + 3, py, 2 * hw - 5, blue);
+  }
+  // reflet sur le corps
+  canvas.drawFastVLine(cx - 17, top + 40, 40, COL_BG);
+}
+
 static void drawWaterView() {
   char buf[32];
   const uint16_t blue = c565(40, 140, 230);
@@ -1236,7 +1257,7 @@ static void drawWaterView() {
   const uint32_t ml = (uint32_t)waterGlasses * WATER_GLASS_ML;
   setRole(F_BIG);
   snprintf(buf, sizeof(buf), "%lu.%02lu", (unsigned long)(ml / 1000), (unsigned long)(ml % 1000 / 10));
-  drawLeft(buf, MX, 84, COL_TEXT);
+  drawLeft(buf, MX, 84, blue);
   const int16_t bw = textWidth(buf);
   setRole(F_LABEL);
   drawLeft("L", MX + bw + 6, 84, COL_DIM);
@@ -1250,15 +1271,13 @@ static void drawWaterView() {
     drawLeft(buf, MX + shown * 28, 126, blue);
   }
 
-  // Bouteille qui se remplit, pourcentage dedans
-  const int16_t bx = W - MX - 50, by = 46, bwid = 48, bh = 92;
-  canvas.fillRoundRect(bx + 16, by - 10, 16, 12, 3, COL_DIM);  // bouchon
-  canvas.drawRoundRect(bx, by, bwid, bh, 10, COL_DIM);
-  const int16_t fill = (int32_t)(bh - 6) * min(ml, (uint32_t)WATER_GOAL_ML) / WATER_GOAL_ML;
-  if (fill > 0) canvas.fillRoundRect(bx + 3, by + bh - 3 - fill, bwid - 6, fill, 7, blue);
+  // Grande bouteille qui se remplit, pourcentage dedans
+  const int16_t cx = W - MX - 26, top = 22;
+  const int16_t fillPx = (int32_t)(BOTTLE_H - 22) * min(ml, (uint32_t)WATER_GOAL_ML) / WATER_GOAL_ML;
+  drawBottle(cx, top, fillPx, blue);
   setRole(F_LABEL);
   snprintf(buf, sizeof(buf), "%lu%%", (unsigned long)(ml * 100 / WATER_GOAL_ML));
-  drawCenter(buf, bx + bwid / 2, by + bh / 2 + 6, COL_TEXT);
+  drawCenter(buf, cx, top + 74, COL_TEXT);
 }
 
 // ---------------- Rappel d'eau ----------------
@@ -1380,6 +1399,36 @@ static void drawHomeView() {
 
 #include "pixel_theme.h"  // thème Pixel : ses vues sur une grille de gros carrés
 
+// Thèmes sans en-tête : recentre verticalement le contenu de la vue
+// entre le haut de l'écran et le pied de page, pour ne pas laisser de vide en haut
+#define FOOTER_TOP (H - 20)  // zone où centrer le contenu
+#define SCAN_LIMIT (H - 12)  // zone fouillée : le pied de page n'est pas encore dessiné
+static void recenterContent() {
+  uint16_t *b = canvas.getBuffer();
+  const uint16_t bg = COL_BG;
+  int16_t top = -1, bot = -1;
+  for (int16_t y = 0; y < SCAN_LIMIT; y++) {
+    const uint16_t *p = b + y * W;
+    for (int16_t x = 0; x < W; x++)
+      if (p[x] != bg) {
+        if (top < 0) top = y;
+        bot = y;
+        break;
+      }
+  }
+  if (top < 0) return;
+  const int16_t h = bot - top + 1;
+  const int16_t dy = (FOOTER_TOP - h) / 2 - top;  // négatif : on remonte
+  if (dy == 0) return;
+  memmove(b + (top + dy) * W, b + top * W, (size_t)h * W * 2);
+  if (dy < 0)
+    for (int16_t y = bot + dy + 1; y <= bot; y++)
+      for (int16_t x = 0; x < W; x++) b[y * W + x] = bg;
+  else
+    for (int16_t y = top; y < top + dy; y++)
+      for (int16_t x = 0; x < W; x++) b[y * W + x] = bg;
+}
+
 static void render() {
   if (sleeping) return;
   Guard g;  // la tâche réseau ne modifie rien pendant le dessin
@@ -1398,6 +1447,7 @@ static void render() {
     return;
   }
   canvas.fillScreen(COL_BG);
+  ownLayout = false;
   if (menuOpen) drawMenu();
   else switch (view) {
     case VIEW_HOME: drawHomeView(); break;
@@ -1413,6 +1463,7 @@ static void render() {
     case VIEW_MARKET: drawMarketView(); break;
     default: drawGaugesView(); break;
   }
+  if (noHeader() && view != VIEW_HOME && !ownLayout) recenterContent();
   drawFooter();
   if (T->fx == FX_SCAN) drawScanlines();
   tft.drawRGBBitmap(0, 0, canvas.getBuffer(), W, H);
